@@ -3,7 +3,7 @@ make_matched_samples = function(freq=.1, N=100){
   # Given the frequency of the positive class and the size of the population
   # it returns a data.frame with two columns (id, match) where each positive
   # patient is matched with the right amount of negatives.
-  
+  inv_freq = 1/freq
   pos_N = floor(freq * N)
   neg_N = N - pos_N
   
@@ -94,4 +94,8 @@ nested_cv = function(patient_table, outer_fold_n=5, inner_fold_n=5, shuffle=TRUE
   
   return (patient_table)
 }
+
+
+pt = make_matched_samples(freq=.5, N=20)
+nested_cv(pt, outer_fold_n = 2, inner_fold_n = 2, shuffle=F)
   
