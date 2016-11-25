@@ -98,4 +98,5 @@ nested_cv = function(patient_table, outer_fold_n=5, inner_fold_n=5, shuffle=TRUE
 
 pt = make_matched_samples(freq=.5, N=20)
 nested_cv(pt, outer_fold_n = 2, inner_fold_n = 2, shuffle=F)
+# check the output, something is dodgy
   
