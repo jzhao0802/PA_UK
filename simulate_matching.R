@@ -77,25 +77,22 @@ nested_cv = function(patient_table, outer_fold_n=5, inner_fold_n=5, shuffle=TRUE
   # shuffle pos_ids make sure they're random
   if (shuffle){
     pos_id = sample(pos_id)
-    patient_table[pos_ix,] = pos_id
   }
   
   # build a lookup table for the CV-ed positive samples
   cv_pos = data.frame(outer_fold, inner_fold)
   rownames(cv_pos) = pos_id
   
-  # get matching negative samples for each positive
-  outer = unlist(lapply(patient_table$match, function(x) cv_pos[x,]$outer_fold), use.names=F)
-  inner = unlist(lapply(patient_table$match, function(x) cv_pos[x,]$inner_fold), use.names=F)
-  
-  # add new columns to patient_table
-  patient_table["outer_fold"] = outer
-  patient_table["inner_fold"] = inner
-  
+  # add outer and inner cv positions to patient_table
+  patient_table = data.frame(patient_table, cv_pos[as.character(pt$match),])
+  rownames(patient_table) = 1:N
   return (patient_table)
 }
 
-
-pt = make_matched_samples(freq=.33, N=31)
-nested_cv(pt, outer_fold_n = 2, inner_fold_n = 2, shuffle=F)
+# let's simulate 52 samples, with 26 positives
+pt = make_matched_samples(freq=.5, N=52)
+# let's do a 5-fold outer and 5-fold inner CV
+nested_cv(pt, outer_fold_n = 5, inner_fold_n = 5, shuffle=F)
+# same example but randomly shuffled folds
+# nested_cv(pt, outer_fold_n = 5, inner_fold_n = 5)
   
