@@ -1,0 +1,87 @@
+
+Call:
+lm(formula = Diff_12monVA_IdxVA ~ ., data = data)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-77.476  -5.647   1.317   7.287  75.759 
+
+Coefficients: (5 not defined because of singularities)
+                         Estimate Std. Error t value Pr(>|t|)    
+(Intercept)            -2.611e+00  6.848e+00  -0.381  0.70296    
+Practice_ID            -4.409e-04  2.078e-04  -2.121  0.03391 *  
+Idx_Dt                  1.196e-08  3.757e-09   3.183  0.00146 ** 
+Age                    -2.025e-01  1.341e-02 -15.103  < 2e-16 ***
+Gender                 -3.124e-01  1.961e-01  -1.593  0.11126    
+VA_Idx                 -2.047e-01  4.631e-03 -44.211  < 2e-16 ***
+VA_PreIdx               9.403e-02  1.595e-02   5.894 3.82e-09 ***
+VA_PreIdx_flag          4.960e-01  4.389e-01   1.130  0.25854    
+Diff_IdxVA_PreIdxVA    -2.143e-01  2.134e-02 -10.041  < 2e-16 ***
+Diff_3rdLastInj_IdxDt   1.065e-03  1.328e-03   0.802  0.42259    
+Diff_IdxDt_DiagDt      -2.540e-03  2.506e-03  -1.014  0.31081    
+Num_Inj_Idx_12mon       3.035e-01  3.023e-01   1.004  0.31547    
+Diff_IdxDt_1stEctDt    -5.500e-04  6.831e-04  -0.805  0.42070    
+Proc_Parcentesis1       4.801e-01  4.050e+00   0.119  0.90564    
+Proc_Parcentesis2      -1.091e+00  4.456e+00  -0.245  0.80663    
+Proc_PDT_Choroid        8.819e-01  2.144e+00   0.411  0.68075    
+Proc_Laser_Retina       1.091e-01  3.110e+00   0.035  0.97201    
+Proc_ContactLens        3.449e-01  7.285e+00   0.047  0.96224    
+Proc_Supplies                  NA         NA      NA       NA    
+Proc_DestrRetina        7.577e+00  3.279e+00   2.311  0.02084 *  
+Proc_DescChoroid        2.929e+00  4.884e+00   0.600  0.54874    
+C_EpiretinalMembrane   -8.365e-01  3.502e-01  -2.389  0.01691 *  
+C_GeographicAtrophy    -2.373e+00  2.970e-01  -7.992 1.39e-15 ***
+C_RPEThickening         6.526e-01  3.243e-01   2.012  0.04422 *  
+C_SubRPEFluid           1.006e-01  2.253e-01   0.447  0.65512    
+C_VitreomacularTrac    -1.418e-01  8.391e-01  -0.169  0.86580    
+C_MacEdmea_Present     -4.057e-01  2.286e-01  -1.775  0.07594 .  
+C_MacEdmea_Mild         2.417e-01  3.062e-01   0.789  0.42988    
+C_MacEdmea_Moderate    -6.696e-01  1.461e+00  -0.458  0.64667    
+C_MacEdmea_Severe       2.971e+00  6.893e-01   4.309 1.64e-05 ***
+C_MacEdmea_Resolved    -2.123e+00  1.476e+00  -1.438  0.15044    
+C_SubRetFluid_Present   1.834e+00  2.149e-01   8.532  < 2e-16 ***
+C_SubRetFluid_Mild      1.740e+00  3.103e-01   5.608 2.07e-08 ***
+C_SbRetFluid_Moderate   1.790e+00  1.448e+00   1.236  0.21635    
+C_SubRetFluid_Severe    3.385e+00  7.027e-01   4.817 1.47e-06 ***
+C_SbRetFluid_Resolved   6.711e+00  1.681e+00   3.991 6.59e-05 ***
+C_LensReplaced          4.492e-01  2.534e-01   1.772  0.07633 .  
+C_VitreousRegen         1.632e-01  1.978e-01   0.825  0.40938    
+C_SenileNucSclerosis   -3.317e-01  2.930e-01  -1.132  0.25753    
+C_NonexudSenMacDegen    2.506e-01  3.206e-01   0.782  0.43449    
+C_SenileCataract        4.108e-01  3.470e-01   1.184  0.23647    
+C_TearFilmInsuff       -5.628e-01  4.855e-01  -1.159  0.24634    
+C_OpenAngleGlaucoma    -1.245e+00  4.404e-01  -2.827  0.00471 ** 
+C_SerousDetatchRPE      1.193e-01  5.320e-01   0.224  0.82250    
+C_Diabetes1            -2.635e+00  4.676e+00  -0.563  0.57315    
+C_HemorrhagicDetRPE     2.065e+00  8.536e-01   2.419  0.01555 *  
+C_Diabetes2            -2.896e+00  4.633e+00  -0.625  0.53197    
+C_Diabetes3            -1.279e+01  5.863e+00  -2.182  0.02911 *  
+C_Diabetes4             4.443e+00  7.145e+00   0.622  0.53400    
+C_Diabetes5            -1.952e+00  1.133e+01  -0.172  0.86322    
+C_Diabetes6            -3.563e+00  8.673e+00  -0.411  0.68119    
+C_Diabetes7                    NA         NA      NA       NA    
+C_Diabetes8                    NA         NA      NA       NA    
+C_HypertenRetinopathy  -2.703e-01  4.269e-01  -0.633  0.52659    
+C_OcularHypertension   -8.073e-01  1.279e+00  -0.631  0.52778    
+C_Blepharitis           4.569e-01  7.751e-01   0.589  0.55557    
+OcularMedsFlag          2.351e-01  2.057e-01   1.143  0.25303    
+Num_Avt_Inj_Idx_12mon   8.357e-01  3.487e-01   2.396  0.01656 *  
+Num_Lct_Inj_Idx_12mon   3.803e-02  1.394e-01   0.273  0.78508    
+Num_Ele_Inj_Idx_12mon   3.567e-02  1.404e-01   0.254  0.79949    
+Num_Mcg_Inj_Idx_12mon  -3.453e-01  1.311e+00  -0.263  0.79227    
+Num_Sel_Inj_Idx_12mon   1.664e-01  2.237e-01   0.744  0.45676    
+Sel3rd_w150days         1.009e+00  3.284e-01   3.072  0.00213 ** 
+Sel3rd_w360days        -2.200e-01  4.312e-01  -0.510  0.60982    
+Treatment_All_Lucentis  2.078e+00  8.124e-01   2.558  0.01054 *  
+Treatment_All_Eylea     1.743e+00  8.170e-01   2.134  0.03288 *  
+Treatment_All_Macugen   4.266e+00  7.434e+00   0.574  0.56607    
+Treatment_All_Avastin          NA         NA      NA       NA    
+Treatment_Switch               NA         NA      NA       NA    
+C_Diabetes              2.211e+00  4.716e+00   0.469  0.63925    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 14.55 on 24281 degrees of freedom
+Multiple R-squared:  0.1188,	Adjusted R-squared:  0.1165 
+F-statistic: 51.14 on 64 and 24281 DF,  p-value: < 2.2e-16
+

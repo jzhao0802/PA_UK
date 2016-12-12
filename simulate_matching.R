@@ -90,9 +90,9 @@ nested_cv = function(patient_table, outer_fold_n=5, inner_fold_n=5, shuffle=TRUE
 }
 
 # let's simulate 52 samples, with 26 positives
-pt = make_matched_samples(freq=.5, N=52)
+pt = make_matched_samples(freq=.5, N=16)
 # let's do a 5-fold outer and 5-fold inner CV
-nested_cv(pt, outer_fold_n = 5, inner_fold_n = 5, shuffle=F)
+nested_cv(pt, outer_fold_n = 2, inner_fold_n = 2, shuffle=F)
 # same example but randomly shuffled folds
 # nested_cv(pt, outer_fold_n = 5, inner_fold_n = 5)
   
