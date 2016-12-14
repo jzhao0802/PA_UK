@@ -17,7 +17,8 @@ library(ggplot2)
 
 # load Boston Housing dataset from mlbench
 data(BostonHousing, package="mlbench")
-regr.task <- makeRegrTask(id="bh", data=BostonHousing, target="medv")
+target="medv"
+regr.task <- makeRegrTask(id="bh", data=BostonHousing, target=target)
 
 # we'll fit an elasticnet regression. 
 # to find out about the params we can tune do:
@@ -55,7 +56,7 @@ lrn <- makeTuneWrapper("regr.glmnet", resampling=inner, par.set=ps,
 outer <- makeResampleDesc("CV", iters=3)
 
 # make a parallel environment for gridsearch
-parallelStartSocket(8, level="mlr.resample")
+parallelStartSocket(8, level="mlr.tuneParams")
 
 # run nested CV
 r <- resample(lrn, regr.task, resampling=outer, models=TRUE,
@@ -89,17 +90,8 @@ getNestedTuneResultsX(r)
 # get predicted scores
 pred_scores <- as.data.frame(r$pred)
 
-# define parameter grid we want to search over
-ps <- makeParamSet(
-  makeDiscreteParam("n.trees", values=seq(400,501, by=100)),
-  makeDiscreteParam("interaction.depth", values=(2:3))
-)
 
-lrn <- makeTuneWrapper("regr.gbm", resampling=inner, par.set=ps, control=ctrl,
-                      show.info=FALSE, measures=m_all)
-
-
-
+mlr::predictLearner(lrn, r$models[[1]], data[,-which(colnames(data)==target)]]
 
 
 
