@@ -236,5 +236,5 @@ test <- function(sampleType="int", freq=0.5, N=16, o=2, i=2){
 }
 
 # run tests
-test()
-test("str")
+# test()
+# test("str")

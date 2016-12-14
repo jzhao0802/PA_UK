@@ -32,6 +32,9 @@ ps <- makeParamSet(
 )
 
 # define grid-search strategy, for random search use makeTuneControlRandom()
+# there are very good practical (comp cost) and theoretical reasons to why
+# prefer RS: http://www.jmlr.org/papers/volume13/bergstra12a/bergstra12a.pdf
+
 ctrl <- makeTuneControlRandom()
 
 # define inner CV strategy, for resampling replace "CV" with "Subsample"
@@ -91,7 +94,7 @@ getNestedTuneResultsX(r)
 pred_scores <- as.data.frame(r$pred)
 
 
-mlr::predictLearner(lrn, r$models[[1]], data[,-which(colnames(data)==target)]]
+mlr::predictLearner(lrn, r$models[[1]], data[,-which(colnames(data)==target)])
 
 
 
