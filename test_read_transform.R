@@ -11,7 +11,7 @@ var_conf = var_config_generator(input_csv = input, output = "subgroup_var_config
 
 # edit the subgroup_var_config.csv and make the ID column key and binary variables categorical
 r = read_transform(input_csv = input, var_config = "subgroup_var_config_edited.csv",
-                   missing_values = "NA", output = "subgroup_transformed",
+                   missing_values = "nill", output = "subgroup_transformed",
                    output_dir = "results", output_csv = T,
                    outcome_var = "Diff_VA12mon_VAIdx", report_csv = "subgroup_report")
 
