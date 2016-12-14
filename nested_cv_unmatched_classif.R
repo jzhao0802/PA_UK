@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------
-# NESTED CV WITH MATCHED DATA
+# NESTED CV WITH UNMATCHED CLASSIFICATION DATA
 # ------------------------------------------------------------------
 
 library(mlr)
@@ -37,27 +37,28 @@ impute_data <- function(df, target){
 df <- impute_data(df, target)
 classif.task <- makeClassifTask(id="BreastCancer", data=df, target=target)
 
-# make random linkage
-
 # fit elastic net with nested matched CV on a random grid
 ps <- makeParamSet(
   makeNumericParam("alpha", lower=0, upper=1),
   makeNumericParam("lambda", lower=-3, upper=3, trafo=function(x) 10^x)
 )
 
+# define Random search grid
 ctrl <- makeTuneControlRandom(maxit=50L)
 inner <- makeResampleDesc("CV", iters=3)
 
+# define perf metrics
 m1 <- auc
 m2 <- setAggregation(auc, test.sd)
 m3 <- setAggregation(auc, train.sd)
 m_all <- list(m1, m2, m3)
 
+# define learners
 lrn <- makeLearner("classif.glmnet", predict.type="prob")
-
 lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
                             show.info=FALSE, measures=m_all)
 
+# run nested cv
 outer <- makeResampleDesc("CV", iters=3)
 
 parallelStartSocket(8, level="mlr.resample")
@@ -76,17 +77,6 @@ r$extract
 # and sd mse over the inner folds
 opt_paths <- getNestedTuneResultsOptPathDf(r)
 
-# visualise the search paths
-g <- ggplot(opt_paths, aes(x=alpha, y=lambda, fill=auc.test.mean))
-g + geom_tile() + facet_wrap("iter")
-
-# restrict the same plot to the lowest 50% of the values
-#low_c <- as.list(quantile(opt_paths$mse.test.mean, probs=c(0, .5)))[[1]]
-#high_c <- as.list(quantile(opt_paths$mse.test.mean, probs=c(0, .5)))[[2]]
-#g <- ggplot(opt_paths, aes(x=alpha, y=lambda, fill=auc.test.mean))
-#g + geom_tile() + facet_wrap(~ iter) + 
-#  scale_fill_gradient(limits=c(low_c, high_c), low="red", high="grey")
-
 # get best parameters for each outer fold
 getNestedTuneResultsX(r)
 
@@ -94,10 +84,11 @@ getNestedTuneResultsX(r)
 pred_scores <- as.data.frame(r$pred)
 
 # get models
-#mods=lapply(r$models, function(x) getLearnerModel(x,more.unwrap=T))
-#mlr::predictLearner(lrn_wrap, r$models[[1]], df[,-which(colnames(df)==target)])
+mods=lapply(r$models, function(x) getLearnerModel(x,more.unwrap=T))
 
-
+# predict data with the first model
+df_no_target <-  df[,-which(colnames(df)==target)]
+mlr::predictLearner(lrn_wrap, r$models[[1]], df_no_target)
 
 # plot the two params with a random search
 resdata = generateHyperParsEffectData(r, trafo = F, include.diagnostics = FALSE)
@@ -109,26 +100,10 @@ min_plt = min(resdata$data$auc.test.mean, na.rm = TRUE)
 max_plt = max(resdata$data$auc.test.mean, na.rm = TRUE)
 med_plt = mean(c(min_plt, max_plt))
 plt + scale_fill_gradient2(breaks = seq(min_plt, max_plt, length.out = 5),
-                           low = "blue", mid = "white", high = "red", midpoint = med_plt)
+                           low = "blue", mid = "white", high = "red", 
+                           midpoint = med_plt)
 
-# plot partial dependece plots
+# plot partial dependece plots - only works with the development branch
 resdata = generateHyperParsEffectData(r, partial.dep = TRUE)
-plotHyperParsEffect(resdata, x = "alpha", y = "auc.test.mean", plot.type = "line",
-                    partial.dep.learn = "regr.randomForest")
-
-# make random linkage for this dataset, with first 100 rows being positives
-pos_n = 100
-id = 1:nrow(df)
-match = c(1:pos_n, sample(c(1:pos_n), nrow(df)-pos_n, replace=T))
-match_df = data.frame(id, match)
-ncv <- nested_cv_matched(match_df, outer_fold_n=5, inner_fold_n=5, shuffle=F)
-
-# make resampling instance
-inner <- makeResampleDesc("CV", iter=5)
-inner_sampling <- makeResampleInstance(inner, classif.task)
-
-# override it with custom
-
-# run non-nested cv
-
-# concat results
+plotHyperParsEffect(resdata, x = "alpha", y = "auc.test.mean", 
+                    plot.type = "line", partial.dep.learn = "regr.randomForest")

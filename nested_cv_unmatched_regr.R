@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------
-# NESTED CV WITH UNMATCHED DATA
+# NESTED CV WITH UNMATCHED REGRESSION DATA
 # ------------------------------------------------------------------
 
 library(mlr)
@@ -93,12 +93,5 @@ getNestedTuneResultsX(r)
 # get predicted scores
 pred_scores <- as.data.frame(r$pred)
 
-
+# predict with one of the returned models
 mlr::predictLearner(lrn, r$models[[1]], data[,-which(colnames(data)==target)])
-
-
-
-
-
-
-

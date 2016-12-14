@@ -4,7 +4,7 @@
 #
 # ------------------------------------------------------------------------------
 
-nested_cv_matched <- function(match_df, outer_fold_n=5, inner_fold_n=5, 
+nested_cv_matched_ix <- function(match_df, outer_fold_n=5, inner_fold_n=5, 
                                shuffle=TRUE){
   # This function takes in a dataframe with two columns. The first column is 
   # "id" and it is the unique ID of each sample. The 2nd col is "match" which 
@@ -203,7 +203,7 @@ test <- function(sampleType="int", freq=0.5, N=16, o=2, i=2){
   # get linkage with indices
   match_df_ix <- matching_to_indices(match_df, key)
   # let's do a 2-fold outer and 2-fold inner CV
-  ncv <- nested_cv_matched(match_df_ix, outer_fold_n=o, inner_fold_n=i, 
+  ncv <- nested_cv_matched_ix(match_df_ix, outer_fold_n=o, inner_fold_n=i, 
                            shuffle=F)
   # same example but randomly shuffled folds
   # ncv <- nested_cv(match_df_ix, outer_fold_n=3, inner_fold_n=2, shuffle=T)
@@ -236,5 +236,5 @@ test <- function(sampleType="int", freq=0.5, N=16, o=2, i=2){
 }
 
 # run tests
-# test()
-# test("str")
+test()
+test("str")
