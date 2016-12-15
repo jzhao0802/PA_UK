@@ -92,10 +92,10 @@ mlr::predictLearner(lrn_wrap, r$models[[1]], df_no_target)
 
 # plot the two params with a random search
 resdata = generateHyperParsEffectData(r, trafo = F, include.diagnostics = FALSE)
-plt = plotHyperParsEffect(resdata, x = "alpha", y = "lambda", z = "auc.test.mean",
-                          plot.type = "heatmap", interpolate = "regr.earth",
-                          show.experiments = T, nested.agg = mean, 
-                          facet = "nested_cv_run")
+plt = plotHyperParsEffect(resdata, x = "alpha", y = "lambda", 
+                          z = "auc.test.mean",plot.type = "heatmap", 
+                          interpolate = "regr.earth", show.experiments = T, 
+                          nested.agg = mean, facet = "nested_cv_run")
 min_plt = min(resdata$data$auc.test.mean, na.rm = TRUE)
 max_plt = max(resdata$data$auc.test.mean, na.rm = TRUE)
 med_plt = mean(c(min_plt, max_plt))
@@ -103,7 +103,7 @@ plt + scale_fill_gradient2(breaks = seq(min_plt, max_plt, length.out = 5),
                            low = "blue", mid = "white", high = "red", 
                            midpoint = med_plt)
 
-# plot partial dependece plots - only works with the development branch
+# plot partial dependece plots - only works with the development branch of mlR
 resdata = generateHyperParsEffectData(r, partial.dep = TRUE)
 plotHyperParsEffect(resdata, x = "alpha", y = "auc.test.mean", 
                     plot.type = "line", partial.dep.learn = "regr.randomForest")
