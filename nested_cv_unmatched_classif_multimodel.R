@@ -37,34 +37,45 @@ impute_data <- function(df, target){
 df <- impute_data(df, target)
 classif.task <- makeClassifTask(id="BreastCancer", data=df, target=target)
 
-# fit elastic net with nested matched CV on a random grid
-ps <- makeParamSet(
-  makeNumericParam("alpha", lower=0, upper=1),
-  makeNumericParam("s", lower=0, upper=2)
-)
-
 # define Random search grid
-ctrl <- makeTuneControlRandom(maxit=50L)
+ctrl <- makeTuneControlRandom(maxit=100L, tune.threshold=TRUE)
 inner <- makeResampleDesc("CV", iters=3)
 
 # define perf metrics
 m1 <- auc
 m2 <- setAggregation(auc, test.sd)
-m3 <- setAggregation(auc, train.sd)
-m_all <- list(m1, m2, m3)
+if (!exists("make_custom_pr_measure", mode="function")) source("prec_at_recall.R")
+pr5 = make_custom_pr_measure(5, "pr5")
+pr10 = make_custom_pr_measure(10, "pr10")
+m_all <- list(m1, m2, pr5, pr10)
 
 # define learners
 lrn <- makeLearner("classif.glmnet", predict.type="prob")
+
+base.learners = list(
+  makeLearner("classif.glmnet", predict.type="prob"),
+  makeLearner("classif.ksvm", predict.type="prob"),
+  makeLearner("classif.randomForest", predict.type="prob")
+)
+lrn = makeModelMultiplexer(base.learners)
+
+ps = makeModelMultiplexerParamSet(lrn,
+  makeNumericParam("sigma", lower = -12, upper = 12, trafo = function(x) 2^x),
+  makeNumericParam("alpha", lower=0, upper=1),
+  makeNumericParam("lambda", lower=-3, upper=3, trafo=function(x) 10^x),
+  makeIntegerParam("ntree", lower = 100L, upper = 1000L)
+)
+
 lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
                             show.info=FALSE, measures=m_all)
 
 # run nested cv
 outer <- makeResampleDesc("CV", iters=3)
 
-parallelStartSocket(8, level="mlr.resample")
+parallelStartSocket(8, level="mlr.tuneParams")
 
 r <- resample(lrn_wrap, classif.task, resampling=outer, models=TRUE,
-              extract=getTuneResult, show.info=FALSE, measures=m_all)
+              extract=getTuneResult, show.info=FALSE)
 parallelStop()
 
 # print mse on the outer test fold

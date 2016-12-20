@@ -94,4 +94,4 @@ getNestedTuneResultsX(r)
 pred_scores <- as.data.frame(r$pred)
 
 # predict with one of the returned models
-mlr::predictLearner(lrn, r$models[[1]], data[,-which(colnames(data)==target)])
+# mlr::predictLearner(lrn, r$models[[1]], data[,-which(colnames(data)==target)])

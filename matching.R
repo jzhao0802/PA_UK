@@ -5,7 +5,7 @@
 # ------------------------------------------------------------------------------
 
 nested_cv_matched_ix <- function(match_df, outer_fold_n=5, inner_fold_n=5, 
-                               shuffle=TRUE){
+                               shuffle=TRUE, downsample=1){
   # This function takes in a dataframe with two columns. The first column is 
   # "id" and it is the unique ID of each sample. The 2nd col is "match" which 
   # links the negative cases to the positive ones. Positives patients are 
@@ -18,14 +18,31 @@ nested_cv_matched_ix <- function(match_df, outer_fold_n=5, inner_fold_n=5,
   matches <- match_df$match
   pos_ix <- which(ids == matches)
   pos <- match_df[pos_ix,]
-  pos_id <- pos$id
   
   # define dimensions
-  N <- dim(match_df)[1]
-  pos_N <- length(pos_id)
+  n <- dim(match_df)[1]
+  pos_n <- length(pos_ix)
+  
+  # do we need to downsample?
+  if (downsample != 1){
+    if (downsample > 1 | downsample <= 0){
+      stop("Downsample must be between 0 and 1.")
+    }
+    down_pos_n <- floor(downsample * pos_n)
+    down_ix = sample(1:pos_n, down_pos_n)
+    pos_ix <- pos_ix[down_ix]
+    pos <- match_df[pos_ix, ]
+    pos_n <- length(pos_ix)
+
+    # downsample the negatives accordingly
+    match_df <- match_df[matches %in% pos$id,]
+    ids <- match_df$id
+    matches <- match_df$match
+  }
+  pos_id <- pos$id
   
   # do we have enough positive samples?
-  if (outer_fold_n * inner_fold_n >= pos_N){
+  if (outer_fold_n * inner_fold_n > pos_n){
     stop("Number of positive samples have to be greater than outer_fold * 
          inner_fold.")
   }
@@ -34,11 +51,11 @@ nested_cv_matched_ix <- function(match_df, outer_fold_n=5, inner_fold_n=5,
   # we first do the two-fold cv for the positives only and then every negative 
   # is following their matched positive. First we create a list of integers, 
   # then split in outer_fold_n number of equal bins
-  outer_fold <- split(1:pos_N, cut(1:pos_N, outer_fold_n))
+  outer_fold <- split(1:pos_n, cut(1:pos_n, outer_fold_n))
   # take those bins and rename the integers going from 1 to N so they go from 1 
   # to outer_fold_n
   start <- 1
-  inner_fold_tmp <- 1:pos_N
+  inner_fold_tmp <- 1:pos_n
   for (i in 1:outer_fold_n) {
     if (i > 1){
       start <- start + outer_len
@@ -70,7 +87,7 @@ nested_cv_matched_ix <- function(match_df, outer_fold_n=5, inner_fold_n=5,
   
   # add outer and inner cv positions to match_df
   match_df <- data.frame(match_df, cv_pos[as.character(matches),])
-  rownames(match_df) <- 1:N
+  rownames(match_df) <- 1:dim(match_df)[1]
   match_df
 }
 
@@ -180,7 +197,7 @@ sim_matched_samples_str <- function(freq=.1, N=100){
 #
 # ------------------------------------------------------------------------------
 
-test <- function(sampleType="int", freq=0.5, N=16, o=2, i=2){
+test <- function(sampleType="int", freq=0.5, N=16, o=2, i=2, downsample=1){
   # Tests the above functions with simple examples. Try it with default params
   # and once you understand the output start playing around with it.
   
@@ -204,7 +221,7 @@ test <- function(sampleType="int", freq=0.5, N=16, o=2, i=2){
   match_df_ix <- matching_to_indices(match_df, key)
   # let's do a 2-fold outer and 2-fold inner CV
   ncv <- nested_cv_matched_ix(match_df_ix, outer_fold_n=o, inner_fold_n=i, 
-                           shuffle=F)
+                           shuffle=F, downsample=downsample)
   # same example but randomly shuffled folds
   # ncv <- nested_cv(match_df_ix, outer_fold_n=3, inner_fold_n=2, shuffle=T)
   
@@ -236,5 +253,6 @@ test <- function(sampleType="int", freq=0.5, N=16, o=2, i=2){
 }
 
 # run tests
-test()
-test("str")
+# test()
+# test(N=32, downsample=.5)
+# test("str", N=32, downsample=.5)
