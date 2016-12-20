@@ -1,71 +1,85 @@
-# ------------------------------------------------------------------
-# NESTED CV WITH UNMATCHED CLASSIFICATION DATA
-# ------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+#
+#                Nested unmatched CV with classification data
+#
+# ------------------------------------------------------------------------------
 
 library(mlr)
 library(readr)
+library(parallel)
 library(parallelMap)
 library(ggplot2)
 
-# load Breast Cancer dataset, impute missing
-data(BreastCancer, package="mlbench")
-df <- BreastCancer
-target <- "Class"
-df$Id <- NULL
+# ------------------------------------------------------------------------------
+# Load data
+# ------------------------------------------------------------------------------
 
-# impute missing values and define classification task
-impute_col_median <- function(x){
-  # Retruns a single column where NA is replaced with median
-  x <- as.numeric(as.character(x))
-  x[is.na(x)] <- median(x, na.rm=TRUE)
-  x 
-}
+# Set seed and ensure results are reproducible even with parallelization, see 
+# here: https://github.com/mlr-org/mlr/issues/938
+set.seed(123, "L'Ecuyer")
 
-data_without_target <- function(df, target){
-  # Return df without the target column
-  df[,-which(colnames(df)==target)]
-}
+# Load breast cancer dataset and var_config
+df <- readr::read_csv("data/breast_cancer.csv")
+var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
 
-impute_data <- function(df, target){
-  # Impute missing values in cols with median except in target
-  df_imp <- data_without_target(df, target)
-  df_imp <- as.data.frame(sapply(df_imp, impute_col_median))
-  df[,-which(colnames(df)==target)] <- df_imp
-  df
-}
+# Make sure to only retain the numerical columns
+source("utils.R")
+df <- get_numerical_variables(df, var_config)
 
-df <- impute_data(df, target)
+# Define target variable column
+target = "Class"
+
+# ------------------------------------------------------------------------------
+# Setup modelling in mlR
+# ------------------------------------------------------------------------------
+
+# Setup the classification task in mlR
 classif.task <- makeClassifTask(id="BreastCancer", data=df, target=target)
 
-# fit elastic net with nested matched CV on a random grid
+# Define hyper parameters
 ps <- makeParamSet(
   makeNumericParam("alpha", lower=0, upper=1),
   makeNumericParam("s", lower=0, upper=2)
 )
 
-# define Random search grid
-ctrl <- makeTuneControlRandom(maxit=50L)
+# Define random grid search with 100 interation per outer fold.
+ctrl <- makeTuneControlRandom(maxit=100L, tune.threshold=T)
+
+# Define outer and inner resampling strategies
+outer <- makeResampleDesc("CV", iters=3)
+
+# The inner could be "Subsample" if we don't have enough positive samples
 inner <- makeResampleDesc("CV", iters=3)
 
-# define perf metrics
-m1 <- auc
-m2 <- setAggregation(auc, test.sd)
-m3 <- setAggregation(auc, train.sd)
-m_all <- list(m1, m2, m3)
+# Define performane metrics
+m1 <- make_custom_pr_measure(5, "pr5")
+m2 <- auc
+m3 <- setAggregation(m1, test.sd)
+m4 <- setAggregation(auc, test.sd)
+m_all <- list(m1, m2, m3, m4)
 
-# define learners
+# Define logistic regression with elasticnet penalty
 lrn <- makeLearner("classif.glmnet", predict.type="prob")
+
+# Define wrapped learner: this is mlR's way of doing nested CV on a learner
 lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
                             show.info=FALSE, measures=m_all)
 
-# run nested cv
-outer <- makeResampleDesc("CV", iters=3)
+# ------------------------------------------------------------------------------
+# Run training with nested CV
+# ------------------------------------------------------------------------------
 
-parallelStartSocket(8, level="mlr.resample")
+# Setup parallelization
+parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
+# Run nested CV
 r <- resample(lrn_wrap, classif.task, resampling=outer, models=TRUE,
               extract=getTuneResult, show.info=FALSE, measures=m_all)
 parallelStop()
+
+# ------------------------------------------------------------------------------
+# Get results
+# ------------------------------------------------------------------------------
 
 # print mse on the outer test fold
 r$measures.test
@@ -85,6 +99,10 @@ pred_scores <- as.data.frame(r$pred)
 
 # get models
 mods=lapply(r$models, function(x) getLearnerModel(x,more.unwrap=T))
+
+# ------------------------------------------------------------------------------
+# Generate hyper parameter plots
+# ------------------------------------------------------------------------------
 
 # predict data with the first model
 df_no_target <-  df[,-which(colnames(df)==target)]
@@ -107,3 +125,7 @@ plt + scale_fill_gradient2(breaks = seq(min_plt, max_plt, length.out = 5),
 resdata = generateHyperParsEffectData(r, partial.dep = TRUE)
 plotHyperParsEffect(resdata, x = "alpha", y = "auc.test.mean", 
                     plot.type = "line", partial.dep.learn = "regr.randomForest")
+
+# ------------------------------------------------------------------------------
+# Generate variable importance plots
+# ------------------------------------------------------------------------------

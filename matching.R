@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-# Functions for getting nested CV index table with matching samples
+#   Functions for getting nested CV index table with matching samples
 #
 # ------------------------------------------------------------------------------
 
@@ -255,4 +255,4 @@ test <- function(sampleType="int", freq=0.5, N=16, o=2, i=2, downsample=1){
 # run tests
 # test()
 # test(N=32, downsample=.5)
-# test("str", N=32, downsample=.5)
+# test("str", N=48, downsample=.5, freq=.25, i=3)

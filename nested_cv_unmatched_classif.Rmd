@@ -1,0 +1,303 @@
+---
+title: "Nested CV classification - LR with elastic net"
+output: html_notebook
+---
+
+### Loading data
+
+This notebook uses mlR to train logistic regression with elastic net penalty on a toy dataset. Nested CV is used to tune the hyper-parameters in parallel. This is ordinary nested CV, __without matching__.
+
+* We start by loading the data and its var_config file and defining the target variable column. 
+* The `var_config` file is used to select the numeric columns. 
+* For reproducibility, we also set the random seed, because it's generally good practice to do so.
+
+```{r}
+library(mlr)
+library(readr)
+library(parallel)
+library(parallelMap)
+library(ggplot2)
+
+# Set seed and ensure results are reproducible even with parallelization, see 
+# here: https://github.com/mlr-org/mlr/issues/938
+set.seed(123, "L'Ecuyer")
+
+# Load breast cancer dataset and var_config
+df <- readr::read_csv("data/breast_cancer.csv")
+var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
+
+# Make sure to only retain the numerical columns
+source("utils.R")
+df <- get_numerical_variables(df, var_config)
+
+# Define target variable column
+target = "Class"
+```
+
+### Setup of mlR
+
+Here we'll define the key aspects of the nested CV:
+
+* the classification task
+* the hyper parameter space we want to search over
+* the search strategy we want to use
+* the outer and inner resampling strategy
+* the error measures we want to optimize
+* the learner we want to train
+
+```{r}
+# Setup the classification task in mlR
+classif.task <- makeClassifTask(id="BreastCancer", data=df, target=target)
+
+# Define hyper parameters
+ps <- makeParamSet(
+  makeNumericParam("alpha", lower=0, upper=1),
+  makeNumericParam("s", lower=0, upper=2)
+)
+```
+
+__Hyper-parameters__ of elastic net:
+
+* We dont have to tune `lambda`, as that's automatically by glmnet. We need to tune `s`, which is the lambda to use at prediction time. This is just a quirky artifact of the glmnet package. See [this](https://github.com/mlr-org/mlr/issues/1030) discussion.
+* Theoretically `s` could be as large as you want, but in the above discussion one of the main contributors of the packages notes that it very rarely exceeds 1.
+* `alpha=0` is ridge, `alpha=1` is lasso.
+
+```{r}
+# Define random grid search with 100 interation per outer fold.
+ctrl <- makeTuneControlRandom(maxit=100L, tune.threshold=T)
+```
+
+Why __random search__? 
+
+* Here's the original [paper](http://www.jmlr.org/papers/volume13/bergstra12a/bergstra12a.pdf). Check Figure 1. it says it all.
+* Also, here's a great [summary](http://stats.stackexchange.com/questions/160479/practical-hyperparameter-optimization-random-vs-grid-search) that explains why is this such a good idea most of the time
+* `tune.threshold=T` will treat the classification threshold as a hyperparameter, instead of rigidly fixing it at 0.5. This is again very useful and comes for free with mlR. See relevant discussion [here](https://github.com/mlr-org/mlr/issues/856).
+* The same works with simple grid search as well, simply do: `ctrl <- makeTuneControlGrid( tune.threshold=T)`
+* If we want to search over a fixed grid, we could specify it like so:
+```{r}
+ps <- makeParamSet(
+  makeDiscreteParam("alpha", values=seq(0, 1, by=.25)),
+  makeDiscreteParam("s", values=values=seq(0, 2, by=.25))
+)
+```
+Notice the `makeDiscreteParam` instead of `makeNumericParam`. 
+
+```{r}
+# Define outer and inner resampling strategies
+outer <- makeResampleDesc("CV", iters=3, stratify=T)
+
+# The inner could be "Subsample" if we don't have enough positive samples
+inner <- makeResampleDesc("CV", iters=3, stratify=T)
+```
+
+__Resampling__
+
+* mlR supports a number of resampling strategies, see [here](https://www.rdocumentation.org/packages/mlr/versions/2.8/topics/makeResampleDesc?). If we don't have enough positive samples (`pos_n < 50`) to do a nested CV, we could use 80% subsampling in the inner loop for instance with: `inner <- makeResampleDesc("Subsample", iters=5, split=4/5)`
+* Matching inherently takes care about stratification of the rare positive class across the folds. But if we don't do matching - like here - we want to set `stratify=T`.
+
+```{r}
+# Define performane metrics
+m1 <- make_custom_pr_measure(5, "pr5")
+m2 <- auc
+m3 <- setAggregation(m1, test.sd)
+m4 <- setAggregation(auc, test.sd)
+m_all <- list(m1, m2, m3, m4)
+```
+
+__Performane metrics__
+
+* mlR supports a wide range of predefined performance metrics, see the list [here](https://mlr-org.github.io/mlr-tutorial/devel/html/measures/index.html). 
+* We can choose any number of these and simply bundle them up as a list. mlR will calculate all of them, but only use the first one to optimize over the search space.
+* These metrics could also be aggregated across the internal folds in several ways. [Here](https://www.rdocumentation.org/packages/mlr/versions/2.9/topics/aggregations?) are the supported aggregation methods.
+* The precision at a given % recall is a composite metric (like the area under the ROC curve or PR curve). It is not supported out of the box, but we can implement it ourselves, [here](https://mlr-org.github.io/mlr-tutorial/devel/html/create_measure/index.html)'s how.
+* `perf_at_recall.R` is mirroring what Lichao did in Spark, i.e. it will calculate the PR curce, find the recall value closest to the requested percentage point, then return the corresponding precision value ( or the maximum one if there are multiple).
+
+```{r}
+# Define logistic regression with elasticnet penalty
+lrn <- makeLearner("classif.glmnet", predict.type="prob")
+
+# Define wrapped learner: this is mlR's way of doing nested CV on a learner
+lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
+                            show.info=FALSE, measures=m_all)
+
+```
+
+* [Here](https://mlr-org.github.io/mlr-tutorial/devel/html/integrated_learners/index.html#integrated-learners) are a __list of all the models__ that are implemented in mlR. We can use any of these.
+* For every learner the tunable parameters could be accessed through the `par.set` attribute, e.g.: `makeLearner("classif.glmnet")$par.set`
+* Most learners are available both for classification and regression. They are denoted with `classif` and `regr` respectively. So if we wanted to run the same analysis but on a continuous outcome (i.e. elastic net regression), all we need to change is: `lrn <- makeLearner("regr.glmnet")`
+* Any classification learner could be set up so it predicts probabilities instead of class membership `predict.type="prob"`. This is preferable for us most of the time.
+
+
+### Run nested CV
+
+```{r}
+# Setup parallelization
+parallelStartSocket(detectCores(), level="mlr.tuneParams")
+```
+
+* The number of CPUs to be used could be easily set with `detectCores()`, but if you're on the server, Lichao pointed out that we should never use more than 3. 
+* There are different levels we could use for parallelization, see [here](https://mlr-org.github.io/mlr-tutorial/devel/html/parallelization/index.html). Bottom line is that most of the time `level="mlr.resample"` will work best. This will start as many processes as many outer folds we have. Ideally this is around the number of our CPUs (3-4).
+* Alternatively `level="mlr.tuneParams"` will parallelize each hyper-parameter combination. 
+
+```{r}
+# Run nested CV
+r <- resample(lrn_wrap, classif.task, resampling=outer, models=TRUE,
+              extract=getTuneResult, show.info=FALSE, measures=m_all)
+parallelStop()
+```
+
+* Set `show.info=T` if you'd like to see the progress of the training process. 
+* `models=T` ensures that we get back the 3 trained models for each outer fold. We can use these to predict the outer test folds or other unseen data. Note however, that this might result in predictions coming from models with different hyper-parameters. You need to ensure that this isn't a problem. See details later. 
+
+### Get results from trained models
+
+```{r}
+# print mse on the outer test fold
+r$measures.test
+
+# print mean mse on the inner folds of the best params
+r$extract
+
+# for each outerfold show all parameter combination with mean 
+# and sd mse over the inner folds
+opt_paths <- getNestedTuneResultsOptPathDf(r)
+
+# get best parameters for each outer fold
+getNestedTuneResultsX(r)
+
+# get predicted scores
+pred_scores <- as.data.frame(r$pred)
+
+# get models
+mods=lapply(r$models, function(x) getLearnerModel(x,more.unwrap=T))
+```
+
+### Full code example
+
+```{r}
+library(mlr)
+library(readr)
+library(parallel)
+library(parallelMap)
+library(ggplot2)
+
+# ------------------------------------------------------------------------------
+# Load data
+# ------------------------------------------------------------------------------
+
+# Set seed and ensure results are reproducible even with parallelization, see 
+# here: https://github.com/mlr-org/mlr/issues/938
+set.seed(123, "L'Ecuyer")
+
+# Load breast cancer dataset and var_config
+df <- readr::read_csv("data/breast_cancer.csv")
+var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
+
+# Make sure to only retain the numerical columns
+source("utils.R")
+df <- get_numerical_variables(df, var_config)
+
+# Define target variable column
+target = "Class"
+
+# ------------------------------------------------------------------------------
+# Setup modelling in mlR
+# ------------------------------------------------------------------------------
+
+# Setup the classification task in mlR
+classif.task <- makeClassifTask(id="BreastCancer", data=df, target=target)
+
+# Define hyper parameters
+ps <- makeParamSet(
+  makeNumericParam("alpha", lower=0, upper=1),
+  makeNumericParam("s", lower=0, upper=2)
+)
+
+# Define random grid search with 100 interation per outer fold.
+ctrl <- makeTuneControlRandom(maxit=100L, tune.threshold=T)
+
+# Define outer and inner resampling strategies
+outer <- makeResampleDesc("CV", iters=3)
+
+# The inner could be "Subsample" if we don't have enough positive samples
+inner <- makeResampleDesc("CV", iters=3)
+
+# Define performane metrics
+m1 <- make_custom_pr_measure(5, "pr5")
+m2 <- auc
+m3 <- setAggregation(m1, test.sd)
+m4 <- setAggregation(auc, test.sd)
+m_all <- list(m1, m2, m3, m4)
+
+# Define logistic regression with elasticnet penalty
+lrn <- makeLearner("classif.glmnet", predict.type="prob")
+
+# Define wrapped learner: this is mlR's way of doing nested CV on a learner
+lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
+                            show.info=FALSE, measures=m_all)
+
+# ------------------------------------------------------------------------------
+# Run training with nested CV
+# ------------------------------------------------------------------------------
+
+# Setup parallelization
+parallelStartSocket(detectCores(), level="mlr.tuneParams")
+
+# Run nested CV
+r <- resample(lrn_wrap, classif.task, resampling=outer, models=TRUE,
+              extract=getTuneResult, show.info=FALSE, measures=m_all)
+parallelStop()
+
+# ------------------------------------------------------------------------------
+# Get results
+# ------------------------------------------------------------------------------
+
+# print mse on the outer test fold
+r$measures.test
+
+# print mean mse on the inner folds of the best params
+r$extract
+
+# for each outerfold show all parameter combination with mean 
+# and sd mse over the inner folds
+opt_paths <- getNestedTuneResultsOptPathDf(r)
+
+# get best parameters for each outer fold
+getNestedTuneResultsX(r)
+
+# get predicted scores
+pred_scores <- as.data.frame(r$pred)
+
+# get models
+mods=lapply(r$models, function(x) getLearnerModel(x,more.unwrap=T))
+
+# ------------------------------------------------------------------------------
+# Generate hyper parameter plots
+# ------------------------------------------------------------------------------
+
+# predict data with the first model
+df_no_target <-  df[,-which(colnames(df)==target)]
+mlr::predictLearner(lrn_wrap, r$models[[1]], df_no_target)
+
+# plot the two params with a random search
+resdata = generateHyperParsEffectData(r, trafo = F, include.diagnostics = FALSE)
+plt = plotHyperParsEffect(resdata, x = "alpha", y = "lambda", 
+                          z = "auc.test.mean",plot.type = "heatmap", 
+                          interpolate = "regr.earth", show.experiments = T, 
+                          nested.agg = mean, facet = "nested_cv_run")
+min_plt = min(resdata$data$auc.test.mean, na.rm = TRUE)
+max_plt = max(resdata$data$auc.test.mean, na.rm = TRUE)
+med_plt = mean(c(min_plt, max_plt))
+plt + scale_fill_gradient2(breaks = seq(min_plt, max_plt, length.out = 5),
+                           low = "blue", mid = "white", high = "red", 
+                           midpoint = med_plt)
+
+# plot partial dependece plots - only works with the development branch of mlR
+resdata = generateHyperParsEffectData(r, partial.dep = TRUE)
+plotHyperParsEffect(resdata, x = "alpha", y = "auc.test.mean", 
+                    plot.type = "line", partial.dep.learn = "regr.randomForest")
+
+# ------------------------------------------------------------------------------
+# Generate variable importance plots
+# ------------------------------------------------------------------------------
+```
