@@ -43,16 +43,17 @@ ps <- makeParamSet(
 )
 
 # Define random grid search with 100 interation per outer fold.
-ctrl <- makeTuneControlRandom(maxit=100L, tune.threshold=T)
+ctrl <- makeTuneControlRandom(maxit=50L, tune.threshold=F)
 
 # Define outer and inner resampling strategies
-outer <- makeResampleDesc("CV", iters=3)
+outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
 
 # The inner could be "Subsample" if we don't have enough positive samples
-inner <- makeResampleDesc("CV", iters=3)
+inner <- makeResampleDesc("CV", iters=3, stratify=T)
 
 # Define performane metrics
 m1 <- make_custom_pr_measure(5, "pr5")
+
 m2 <- auc
 m3 <- setAggregation(m1, test.sd)
 m4 <- setAggregation(auc, test.sd)
@@ -70,7 +71,7 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # ------------------------------------------------------------------------------
 
 # Setup parallelization
-parallelStartSocket(detectCores(), level="mlr.tuneParams")
+parallelStartSocket(detectCores(), level="mlr.resample")
 
 # Run nested CV
 r <- resample(lrn_wrap, classif.task, resampling=outer, models=TRUE,
@@ -81,15 +82,23 @@ parallelStop()
 # Get results
 # ------------------------------------------------------------------------------
 
-# print mse on the outer test fold
-r$measures.test
+# Get table of performance metrics on the outer test fold
+t(r$measures.test)
 
-# print mean mse on the inner folds of the best params
-r$extract
+# Get 
+extractSubList(r$extract, "y")
+
+# Get corresponding best parameters that were used on the outer training
+getNestedTuneResultsX(r)
+# Or
+extractSubList(r$extract, "x")
+
+
+
 
 # for each outerfold show all parameter combination with mean 
 # and sd mse over the inner folds
-opt_paths <- getNestedTuneResultsOptPathDf(r)
+opt_paths <- get_opt_path(r)
 
 # get best parameters for each outer fold
 getNestedTuneResultsX(r)

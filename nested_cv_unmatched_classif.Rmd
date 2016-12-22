@@ -56,23 +56,26 @@ ps <- makeParamSet(
 )
 ```
 
-__Hyper-parameters__ of elastic net:
+__Hyper-parameters__:
 
-* We dont have to tune `lambda`, as that's automatically by glmnet. We need to tune `s`, which is the lambda to use at prediction time. This is just a quirky artifact of the glmnet package. See [this](https://github.com/mlr-org/mlr/issues/1030) discussion.
-* Theoretically `s` could be as large as you want, but in the above discussion one of the main contributors of the packages notes that it very rarely exceeds 1.
-* `alpha=0` is ridge, `alpha=1` is lasso.
+* For every learner the tunable parameters could be accessed through the `par.set` attribute, e.g.: `makeLearner("classif.glmnet")$par.set`
+* Elastic net parameters:
+    * We dont have to tune `lambda`, as that's automatically by glmnet. We need to tune `s`, which is the lambda to use at prediction time. This is just a quirky artifact of the glmnet package. See [this](https://github.com/mlr-org/mlr/issues/1030) discussion.
+    * Theoretically `s` could be as large as you want, but in the above discussion one of the main contributors of the packages notes that it very rarely exceeds 1.
+    * `alpha=0` is ridge, `alpha=1` is lasso.
+
 
 ```{r}
 # Define random grid search with 100 interation per outer fold.
-ctrl <- makeTuneControlRandom(maxit=100L, tune.threshold=T)
+ctrl <- makeTuneControlRandom(maxit=100L, tune.threshold=F)
 ```
 
 Why __random search__? 
 
 * Here's the original [paper](http://www.jmlr.org/papers/volume13/bergstra12a/bergstra12a.pdf). Check Figure 1. it says it all.
 * Also, here's a great [summary](http://stats.stackexchange.com/questions/160479/practical-hyperparameter-optimization-random-vs-grid-search) that explains why is this such a good idea most of the time
-* `tune.threshold=T` will treat the classification threshold as a hyperparameter, instead of rigidly fixing it at 0.5. This is again very useful and comes for free with mlR. See relevant discussion [here](https://github.com/mlr-org/mlr/issues/856).
-* The same works with simple grid search as well, simply do: `ctrl <- makeTuneControlGrid( tune.threshold=T)`
+* `tune.threshold=T` will treat the classification threshold as a hyperparameter, instead of rigidly fixing it at 0.5. This is again very useful and comes for free with mlR. Note, this will increase the running time substantially though. See relevant discussion [here](https://github.com/mlr-org/mlr/issues/856). 
+* The same works with simple grid search as well, simply do: `ctrl <- makeTuneControlGrid()`
 * If we want to search over a fixed grid, we could specify it like so:
 ```{r}
 ps <- makeParamSet(
@@ -84,7 +87,7 @@ Notice the `makeDiscreteParam` instead of `makeNumericParam`.
 
 ```{r}
 # Define outer and inner resampling strategies
-outer <- makeResampleDesc("CV", iters=3, stratify=T)
+outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
 
 # The inner could be "Subsample" if we don't have enough positive samples
 inner <- makeResampleDesc("CV", iters=3, stratify=T)
@@ -94,6 +97,7 @@ __Resampling__
 
 * mlR supports a number of resampling strategies, see [here](https://www.rdocumentation.org/packages/mlr/versions/2.8/topics/makeResampleDesc?). If we don't have enough positive samples (`pos_n < 50`) to do a nested CV, we could use 80% subsampling in the inner loop for instance with: `inner <- makeResampleDesc("Subsample", iters=5, split=4/5)`
 * Matching inherently takes care about stratification of the rare positive class across the folds. But if we don't do matching - like here - we want to set `stratify=T`.
+* `predict = "both"` ensures that we get the predicted scores for both the training and testing folds, so we can check how much overfitting is going on.
 
 ```{r}
 # Define performane metrics
@@ -107,6 +111,7 @@ m_all <- list(m1, m2, m3, m4)
 __Performane metrics__
 
 * mlR supports a wide range of predefined performance metrics, see the list [here](https://mlr-org.github.io/mlr-tutorial/devel/html/measures/index.html). 
+Or even simpler, just type `listMeasures(classif.task)`.
 * We can choose any number of these and simply bundle them up as a list. mlR will calculate all of them, but only use the first one to optimize over the search space.
 * These metrics could also be aggregated across the internal folds in several ways. [Here](https://www.rdocumentation.org/packages/mlr/versions/2.9/topics/aggregations?) are the supported aggregation methods.
 * The precision at a given % recall is a composite metric (like the area under the ROC curve or PR curve). It is not supported out of the box, but we can implement it ourselves, [here](https://mlr-org.github.io/mlr-tutorial/devel/html/create_measure/index.html)'s how.
@@ -123,7 +128,6 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 ```
 
 * [Here](https://mlr-org.github.io/mlr-tutorial/devel/html/integrated_learners/index.html#integrated-learners) are a __list of all the models__ that are implemented in mlR. We can use any of these.
-* For every learner the tunable parameters could be accessed through the `par.set` attribute, e.g.: `makeLearner("classif.glmnet")$par.set`
 * Most learners are available both for classification and regression. They are denoted with `classif` and `regr` respectively. So if we wanted to run the same analysis but on a continuous outcome (i.e. elastic net regression), all we need to change is: `lrn <- makeLearner("regr.glmnet")`
 * Any classification learner could be set up so it predicts probabilities instead of class membership `predict.type="prob"`. This is preferable for us most of the time.
 

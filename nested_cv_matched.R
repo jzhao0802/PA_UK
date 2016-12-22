@@ -75,7 +75,7 @@ m = list(pr5, pr10, auc)
 id <- 1:nrow(df)
 match <- id
 target_col <- df[[target]]
-pos_ix <- which(target_col == "malignant")
+pos_ix <- which(target_col == 1)
 neg_ix <- base::setdiff(id, pos_ix)
 match[neg_ix] = rep(match[pos_ix], 10)[1:length(neg_ix)]
 match_df = data.frame(id, match)
