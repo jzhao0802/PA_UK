@@ -185,10 +185,7 @@ plotPartialDependence(par_dep_data)
 # ------------------------------------------------------------------------------
 
 # Plot a performance metric for each pair of hyper parameter, generates .pdf
-plot_hyperpar_pairs(res, "auc.test.mean")
+plot_hyperpar_pairs(res, "auc.test.mean", output_folder="elasticnet_hypers")
 
-# If we want to save into a specific folder
-# plot_hyperpar_pairs(res, "auc.test.mean", output_folder="test")
-
-# If we used a trafo function in the grid
+# If we used a trafo function in the grid add trafo=T
 # plot_hyperpar_pairs(res, "auc.test.mean", trafo=T)

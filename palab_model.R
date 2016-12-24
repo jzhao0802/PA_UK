@@ -283,6 +283,21 @@ plot_rf_vi <- function(model, title){
 }
 
 # ------------------------------------------------------------------------------
+# Plot decision tree, simple and fancy as well
+# ------------------------------------------------------------------------------
+
+plot_dt <- function(model, pretty=F){
+  if (pretty){
+   library(rattle)
+    plt <- fancyRpartPlot(model)
+  }else{
+    plt <- plot(models)
+    text(models)
+  }
+  plt
+}
+
+# ------------------------------------------------------------------------------
 # Plot each hyper-parameter pair and the interpolated performance metric
 # ------------------------------------------------------------------------------
 
@@ -320,16 +335,19 @@ plot_hyperpar_pairs <- function(results, perf_metric, output_folder="", trafo=F)
     subplots <- list()
     # Get axes of the plot
     axes <- all_axes[p, ]
-    print(axes)
     for (i in 1:subplot_n){
       # df stores the relevant data of each outer fold
       df <- resdata
+      # Discard hyperparams that we are not plotting, otherwise we get a nasty
+      # bug that took me 3 hours to debug
+      df$hyperparams <- axes[1:2]
       if (i==1){
         title = paste("All outer folds combined")
       }else{
         title = paste("Outer fold", as.character(i-1))
         # Faceting with nested_cv_run is not implemented yet, we do it manually
-        df$data <- df$data[df$data$nested_cv_run==i-1,c(axes[1], axes[2])]
+        df$data <- df$data[df$data$nested_cv_run==i-1,]
+        
       }
       min_plt <- min(df$data[perf_metric], na.rm=T)
       max_plt <- max(df$data[perf_metric], na.rm=T)

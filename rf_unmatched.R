@@ -51,7 +51,7 @@ inverse_weights <- 1/(target_f_sum/sum(target_f_sum))
 # Replace each class with its inverse weight
 target_iw <- unlist(lapply(target_f, function(x) inverse_weights[x]))
 # Not yet implemented by mlR, but hopefully soon will be, raised issue on github
-lrn <- setHyperPars(lrn, case.weights=target_iw)
+# lrn <- setHyperPars(lrn, case.weights=target_iw)
 
 # Define range of mtry we will search over
 features_n <- sum(dataset$task.desc$n.feat) 
@@ -206,10 +206,4 @@ plotPartialDependence(par_dep_data)
 # ------------------------------------------------------------------------------
 
 # Plot a performance metric for each pair of hyper parameter, generates .pdf
-plot_hyperpar_pairs(res, "auc.test.mean", trafo=T)
-
-# If we want to save into a specific folder
-# plot_hyperpar_pairs(res, "auc.test.mean", output_folder="test")
-
-# If we used a trafo function in the grid
-# plot_hyperpar_pairs(res, "auc.test.mean", trafo=T)
+plot_hyperpar_pairs(res, "auc.test.mean", trafo=T, output_folder="rf_hypers")
