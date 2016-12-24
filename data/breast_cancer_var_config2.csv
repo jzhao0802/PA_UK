@@ -1,0 +1,12 @@
+Column,Type
+Cl.thickness,numerical
+Cell.size,numerical
+Cell.shape,numerical
+Marg.adhesion,numerical
+Epith.c.size,numerical
+Bare.nuclei,numerical
+Bl.cromatin,numerical
+Normal.nucleoli,numerical
+Mitoses,categorical
+Class,numerical
+ID,key
