@@ -17,6 +17,8 @@ library(readr)
 library(parallel)
 library(parallelMap)
 library(ggplot2)
+source("utils.R")
+source("prec_at_recall.R")
 
 # Set seed and ensure results are reproducible even with parallelization, see 
 # here: https://github.com/mlr-org/mlr/issues/938
@@ -49,10 +51,18 @@ Here we'll define the key aspects of the nested CV:
 # Setup the classification task in mlR
 classif.task <- makeClassifTask(id="BreastCancer", data=df, target=target)
 
+# Define logistic regression with elasticnet penalty
+lrn <- makeLearner("classif.glmnet", predict.type="prob")
+
+# Find max lambda as suggested here: 
+# https://github.com/mlr-org/mlr/issues/1030#issuecomment-233677172
+tmp_model <- train(lrn, classif.task)
+max_lambda <- max(tmp_model$learner.model$lambda)
+
 # Define hyper parameters
 ps <- makeParamSet(
   makeNumericParam("alpha", lower=0, upper=1),
-  makeNumericParam("s", lower=0, upper=2)
+  makeNumericParam("s", lower=0, upper=max_lambda*2)
 )
 ```
 
@@ -63,6 +73,7 @@ __Hyper-parameters__:
     * We dont have to tune `lambda`, as that's automatically by glmnet. We need to tune `s`, which is the lambda to use at prediction time. This is just a quirky artifact of the glmnet package. See [this](https://github.com/mlr-org/mlr/issues/1030) discussion.
     * Theoretically `s` could be as large as you want, but in the above discussion one of the main contributors of the packages notes that it very rarely exceeds 1.
     * `alpha=0` is ridge, `alpha=1` is lasso.
+* See a lot more about mlR's integrated learners later.
 
 
 ```{r}
@@ -80,7 +91,7 @@ Why __random search__?
 ```{r}
 ps <- makeParamSet(
   makeDiscreteParam("alpha", values=seq(0, 1, by=.25)),
-  makeDiscreteParam("s", values=values=seq(0, 2, by=.25))
+  makeDiscreteParam("s", values=seq(0, 2, by=.25))
 )
 ```
 Notice the `makeDiscreteParam` instead of `makeNumericParam`. 
@@ -118,9 +129,6 @@ Or even simpler, just type `listMeasures(classif.task)`.
 * `perf_at_recall.R` is mirroring what Lichao did in Spark, i.e. it will calculate the PR curce, find the recall value closest to the requested percentage point, then return the corresponding precision value ( or the maximum one if there are multiple).
 
 ```{r}
-# Define logistic regression with elasticnet penalty
-lrn <- makeLearner("classif.glmnet", predict.type="prob")
-
 # Define wrapped learner: this is mlR's way of doing nested CV on a learner
 lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
                             show.info=FALSE, measures=m_all)

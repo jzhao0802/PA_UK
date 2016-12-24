@@ -78,7 +78,7 @@ test_nested_cv_matched <- function(){
   print(data.frame(id, match, target_col))
   
   # load matching cv creator function: outer 3-fold, inner 3-fold
-  if (!exists("nested_cv_matched_ix", mode="function")) source("matching.R")
+  source("palab_matching.R")
   ncv <- nested_cv_matched_ix(match_df, outer_fold_n=3, inner_fold_n=3, 
                               shuffle=F)
   print_break_line()
