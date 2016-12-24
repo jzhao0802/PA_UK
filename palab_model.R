@@ -191,6 +191,90 @@ get_results <- function(results, detailed=F, all_measures=F, write_csv=F){
   to_return
 }
 
+
+# ------------------------------------------------------------------------------
+# Extract results from tuned NON-nested CV model
+# ------------------------------------------------------------------------------
+
+get_non_nested_results <- function(results, detailed=F, all_measures=F, 
+                                   write_csv=F){
+  
+  # Define return list
+  info_col_name <- ""
+  info_df <- data.frame(info_col_name, results$task.id, results$learner.id)
+  colnames(info_df) <- c("Info", "Dataset", "Learner")
+  to_write <- list("info"= info_df)
+  to_return <- list("info" = data.frame(results$task.id, results$learner.id))
+  
+  # Extract results from nested CV results
+  o_train <- results$measures.test
+  o_train$iter <- NULL
+  o_test <- results$measures.train
+  o_test$iter <- NULL
+  
+  # Discard columns with aggregated SD values in the outer loop
+  no_sd_ix <- !grepl("sd", colnames(o_train))
+  o_train <- o_train[,no_sd_ix]
+  o_test <- o_test[,no_sd_ix]
+  
+  # Add table name
+  o_train_w <- cbind("Outer train"=1:nrow(o_train), o_train)
+  o_test_w <- cbind("Outer test"=1:nrow(o_train), o_test)
+  
+  # Save whole table if user wants them
+  if (all_measures){
+    to_write <- c(to_write, list("outer_train" = o_train_w,
+                                 "outer_test" = o_test_w))
+    to_return <- c(to_return, list("outer_train" = o_train,
+                                   "outer_test" = o_test))
+  }
+  
+  # Difine difference matrices
+  o_train_minus_o_test <- o_train - o_test
+  
+  # Collect summary stats
+  o_train_mean <- unlist(lapply(o_train, mean))
+  o_train_sd <- unlist(lapply(o_train, sd))
+  o_test_mean <- unlist(lapply(o_test, mean))
+  o_test_sd <- unlist(lapply(o_test, sd))
+  o_train_minus_o_test_mean <- unlist(lapply(o_train_minus_o_test, mean))
+  o_train_minus_o_test_sd <- unlist(lapply(o_train_minus_o_test, sd))
+  
+  if (detailed){
+    summary = rbind(o_train_mean, o_train_sd, o_test_mean, o_test_sd,
+                    o_train_minus_o_test_mean, o_train_minus_o_test_sd)
+    # add row names as a new column
+    row_names <- c("Outer train mean", "Outer train std",
+                   "Outer test mean", "Outer test std",
+                   "(outer train - outer test) mean",
+                   "(outer train - outer test) std")
+  }else{
+    summary <- rbind(o_test_mean, o_test_sd, o_train_minus_o_test_mean)
+    # add row names as a new column
+    row_names <- c("Outer test mean", "Outer test std",
+                   "(outer train - outer test) mean")
+  }
+  summary_w <- cbind("Summary"=row_names, summary)
+  rownames(summary) <- row_names
+  to_write <- c(to_write, list("summary"=summary_w))
+  to_return <- c(to_return, list("summary"=summary))
+  
+  # write results to csv if needed
+  if (write_csv){
+    # get time stamp and make a (Windows safe) file name out of it
+    t <- as.character(Sys.time())
+    t <- gsub(" ", "_", t)
+    t <- gsub(":", "-", t)
+    output_csv <- paste(t, '.csv', sep='')
+    write_df <- function(df){
+      write.table(as.data.frame(df), output_csv, append=T, sep=',', row.names=F)
+    }
+    suppressWarnings(lapply(to_write, write_df))
+  }
+  
+  #return results object
+  to_return
+}
 # ------------------------------------------------------------------------------
 # Get paths of the optimized hyper parameters, models and best mean params
 # ------------------------------------------------------------------------------
