@@ -47,9 +47,13 @@ max_lambda <- max(tmp_model$learner.model$lambda)
 
 # Define hyper parameters
 ps <- makeParamSet(
+  # for lasso delete the alpha from the search space and set it (see below)
   makeNumericParam("alpha", lower=0, upper=1),
   makeNumericParam("s", lower=0, upper=max_lambda*2)
 )
+
+# For Lasso penalty do:
+# lrn <- setHyperPars(lrn, alpha=1)
 
 # Define random grid search with 100 interation per outer fold.
 ctrl <- makeTuneControlRandom(maxit=50L, tune.threshold=F)

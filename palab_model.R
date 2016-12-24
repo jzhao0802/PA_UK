@@ -291,8 +291,9 @@ plot_dt <- function(model, pretty=F){
    library(rattle)
     plt <- fancyRpartPlot(model)
   }else{
-    plt <- plot(models)
-    text(models)
+    par(mar=c(2.1,4.1,2.1,4.1))
+    plt <- plot(model)
+    text(model)
   }
   plt
 }

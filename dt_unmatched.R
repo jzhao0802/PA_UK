@@ -132,13 +132,13 @@ o_models[[1]]$splits
 # Plot the decision tree of the first outer fold, very basic
 plot_dt(o_models[[1]], pretty=F)
 
-# Plot fancy decision tree from 1st outer fold, requires a few packages: rattle
+# Plot fancy decision tree from 1st outer fold, requires a few packages: rattle,
+# rpart.plot, GTK for windows, etc, but it's worth it
 plot_dt(o_models[[1]], pretty=T)
 
 # Get rules from tree of the first outer fold
 library(rpart.utils)
 dt_rules1 <- rpart.rules.table(o_models[[1]])
-
 
 # This is how to predict with the first model
 predict(res$models[[1]], dataset)
