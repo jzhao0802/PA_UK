@@ -25,7 +25,7 @@ var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
 
 # Make sure to only retain the numerical columns
 source("palab_model.R")
-df <- get_numerical_variables(df, var_config)
+df <- get_variables(df, var_config)
 
 # Define target variable column
 target = "Class"
@@ -37,8 +37,15 @@ target = "Class"
 # Setup the classification task in mlR
 dataset <- makeClassifTask(id="BreastCancer", data=df, target=target)
 
+# Downsample number of observations to 50%, preserving the class imbalance
+# dataset <- downsample(dataset, perc = .5, stratify=T)
+
+# Check summary of dataset and frequency of classes
+dataset
+get_class_freqs(dataset)
+
 # Define logistic regression with elasticnet penalty
-lrn <- makeLearner("classif.logreg", predict.type="prob")
+lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
 
 # Define outer and inner resampling strategies
 outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
@@ -99,6 +106,9 @@ o_models <- get_models(res)
 
 # Print model output for the first outer fold model
 summary(o_models[[1]])
+
+# Print odds ratios and CIs
+get_odds_ratios(o_models[[1]])
 
 # Plot model (residuals, fitted, leverage)
 plot(o_models[[1]])

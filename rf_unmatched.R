@@ -25,7 +25,7 @@ var_config <- readr::read_csv("data/breast_cancer_var_config2.csv")
 
 # RF can handle categorical variables, so we'll keep those as well
 source("palab_model.R")
-df <- get_numerical_variables(df, var_config, categorical=T)
+df <- get_variables(df, var_config, categorical=T)
 
 # Define target variable column
 target = "Class"
@@ -37,9 +37,16 @@ target = "Class"
 # Setup the classification task in mlR
 dataset <- makeClassifTask(id="BreastCancer", data=df, target=target)
 
+# Downsample number of observations to 50%, preserving the class imbalance
+# dataset <- downsample(dataset, perc = .5, stratify=T)
+
+# Check summary of dataset and frequency of classes
+dataset
+get_class_freqs(dataset)
+
 # Define random Forest, we use the fastes available implementation see:
 # https://arxiv.org/pdf/1508.04409.pdf
-lrn <- makeLearner("classif.ranger", predict.type="prob")
+lrn <- makeLearner("classif.ranger", predict.type="prob", predict.threshold=0.5)
 
 # Cheaper than OOB/permutation estimation of feature importance
 lrn <- setHyperPars(lrn, importance="impurity")

@@ -8,7 +8,7 @@
 # Get numeric variables from input dataframe
 # ------------------------------------------------------------------------------
 
-get_numerical_variables <- function(input, var_config, categorical=F) {
+get_variables <- function(input, var_config, categorical=F) {
   library(dplyr)  
   # Keeping only those variables in var_config that are in input and
   # are numerical
@@ -33,9 +33,9 @@ get_numerical_variables <- function(input, var_config, categorical=F) {
 # Function to create custom precision at x% recall in mlR
 # ------------------------------------------------------------------------------
 
-make_custom_pr_measure <- function(recall_perc=10, name_str="pr5"){
+make_custom_pr_measure <- function(recall_perc=5, name_str="pr5"){
   
-  find_prec_at_recall <- function(pred, recall_perc=10){
+  find_prec_at_recall <- function(pred, recall_perc=5){
     library(PRROC)
     # This function takes in a prediction output from a trained mlR learner. It
     # extracts the predicitons, and finds the highest precision at a given
@@ -459,4 +459,24 @@ plot_hyperpar_pairs <- function(results, perf_metric, output_folder="", trafo=F)
     multiplot <- marrangeGrob(subplots, nrow=2, ncol=2, top=main_title)
     ggsave(output_path, multiplot)
   }
+}
+
+
+# ------------------------------------------------------------------------------
+# Calculate odds ratios from the logistic regression coefficients
+# ------------------------------------------------------------------------------
+
+get_odds_ratios <- function(model){
+  # For details see here: http://www.ats.ucla.edu/stat/r/dae/logit.htm
+  exp(cbind(OR = coef(model), confint(model)))
+}
+
+# ------------------------------------------------------------------------------
+# Return frequency of classes in classification task
+# ------------------------------------------------------------------------------
+
+get_class_freqs <- function(dataset){
+  library(mlr)
+  target <- table(getTaskTargets(dataset))
+  target/sum(target)
 }

@@ -25,7 +25,7 @@ var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
 
 # Make sure to only retain the numerical columns
 source("palab_model.R")
-df <- get_numerical_variables(df, var_config)
+df <- get_variables(df, var_config)
 
 # Define target variable column
 target = "Class"
@@ -37,8 +37,15 @@ target = "Class"
 # Setup the classification task in mlR
 dataset <- makeClassifTask(id="BreastCancer", data=df, target=target)
 
+# Downsample number of observations to 50%, preserving the class imbalance
+# dataset <- downsample(dataset, perc = .5, stratify=T)
+
+# Check summary of dataset and frequency of classes
+dataset
+get_class_freqs(dataset)
+
 # Define logistic regression with elasticnet penalty
-lrn <- makeLearner("classif.glmnet", predict.type="prob")
+lrn <- makeLearner("classif.glmnet", predict.type="prob", predict.threshold=0.5)
 
 # Find max lambda as suggested here: 
 # https://github.com/mlr-org/mlr/issues/1030#issuecomment-233677172
