@@ -5,28 +5,99 @@
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
-# Get numeric variables from input dataframe
+# Get numeric (or categorical) variables from input dataframe
 # ------------------------------------------------------------------------------
 
 get_variables <- function(input, var_config, categorical=F) {
   library(dplyr)  
-  # Keeping only those variables in var_config that are in input and
-  # are numerical
-  
+
   if (categorical){
     accepted_types <- c("numerical", "categorical")
   }else{
     accepted_types <- c("numerical")
   }
-  var_config_numerical <- var_config %>%
+  var_config_accepted <- var_config %>%
     dplyr::filter_(~Column %in% colnames(input)) %>%
     dplyr::filter_(~Type %in% accepted_types)
   
+  if (categorical){
+    categoricals <- var_config_accepted %>% filter_(~Type %in% accepted_types)
+  }
+  
   # Keeping only these variables from the input and returning the dataframe
   output <- input %>%
-    select_(.dots = var_config_numerical$Column)
+    select_(.dots = var_config_accepted$Column)
+  
+  # Turning all categorical into factors
+  output[categoricals$Column] <- lapply(output[categoricals$Column], as.factor)
   
   output
+}
+
+# ------------------------------------------------------------------------------
+# Return frequency of classes in classification task
+# ------------------------------------------------------------------------------
+
+get_class_freqs <- function(dataset){
+  library(mlr)
+  target <- table(getTaskTargets(dataset))
+  target/sum(target)
+}
+
+# ------------------------------------------------------------------------------
+# Impute missing data
+# ------------------------------------------------------------------------------
+
+impute_col_median <- function(x){
+  # Retruns a single column where NA is replaced with median
+  x <- as.numeric(as.character(x))
+  x[is.na(x)] <- median(x, na.rm=TRUE)
+  x 
+}
+
+impute_col_mean <- function(x){
+  # Retruns a single column where NA is replaced with mean
+  x <- as.numeric(as.character(x))
+  x[is.na(x)] <- mean(x, na.rm=TRUE)
+  x 
+}
+
+data_without_target <- function(df, target){
+  # Return df without the target column
+  df[,-which(colnames(df)==target)]
+}
+
+impute_data <- function(df, target, method="median"){
+  # Impute missing values in cols with mean or median except in target
+  df_imp <- data_without_target(df, target)
+  if (method=="median"){
+    df_imp <- as.data.frame(sapply(df_imp, impute_col_median))
+  }else{
+    df_imp <- as.data.frame(sapply(df_imp, impute_col_mean))
+  }
+  df[,-which(colnames(df)==target)] <- df_imp
+  df
+}
+
+# ------------------------------------------------------------------------------
+# Timing functions
+# ------------------------------------------------------------------------------
+
+tic <- function(gcFirst = TRUE, type=c("elapsed", "user.self", "sys.self")){
+  type <- match.arg(type)
+  assign(".type", type, envir=baseenv())
+  if(gcFirst) gc(FALSE)
+  tic <- proc.time()[type]         
+  assign(".tic", tic, envir=baseenv())
+  invisible(tic)
+}
+
+toc <- function(){
+  type <- get(".type", envir=baseenv())
+  toc <- proc.time()[type]
+  tic <- get(".tic", envir=baseenv())
+  print(toc - tic)
+  invisible(toc)
 }
 
 # ------------------------------------------------------------------------------
@@ -461,7 +532,6 @@ plot_hyperpar_pairs <- function(results, perf_metric, output_folder="", trafo=F)
   }
 }
 
-
 # ------------------------------------------------------------------------------
 # Calculate odds ratios from the logistic regression coefficients
 # ------------------------------------------------------------------------------
@@ -472,11 +542,92 @@ get_odds_ratios <- function(model){
 }
 
 # ------------------------------------------------------------------------------
-# Return frequency of classes in classification task
+# Calculate odds ratios from the logistic regression coefficients
 # ------------------------------------------------------------------------------
 
-get_class_freqs <- function(dataset){
-  library(mlr)
-  target <- table(getTaskTargets(dataset))
-  target/sum(target)
+get_dt_rules <- function(model){
+  # This is a modified version of rattle::asRules() that saves results as a 
+  # data.frame instead of just printing them out
+  library(rpart)
+  library(BBmisc)
+  
+  if (!inherits(model, "rpart")){
+    stop("Not a legitimate rpart tree")
+  }
+  
+  # Basic vars
+  ylevels <- attr(model, "ylevels")
+  # Regression tree?
+  rtree <- length(ylevels) == 0
+  target <- as.character(attr(model$terms, "variables")[2])
+  frm <- model$frame
+  names <- row.names(frm)
+  ds.size <-  frm[1,]$n
+  
+  # Get each leaf node as a rule, and sort them
+  if (rtree){
+    # Sort rules by coverage
+    ordered <- rev(sort(frm$n, index=T)$ix)
+  }else{ 
+    # Sort rules by prob of positive class i.e. 1 (the 5th col in binary class)
+    ordered <- rev(sort(frm$yval2[,5], index=T)$ix)
+  }
+  
+  # Define lists that will hold the cols of the resulting data.frame
+  names_list <- c()
+  covers <- c()
+  pcovers <- c()
+  pths <- c()
+  yvals <- c()
+  probs <- c()
+  
+  # Iterate through rules one by one
+  for (i in ordered){
+    if (frm[i,1] == "<leaf>"){
+      # Get stats of leaf 
+      rule <- frm[i,]
+      if (rtree){
+        yval <- rule$yval
+      }else{
+        yval <- ylevels[rule$yval]
+      }
+      cover <- rule$n
+      pcover <- round(100*cover/ds.size)
+      if (!rtree){
+        prob <- rule$yval2[,5]
+      }
+      
+      # Get the path from root to tip
+      pth <- rpart::path.rpart(model, nodes=as.numeric(names[i]), print.it=F)
+      pth <- unlist(pth)[-1]
+      if (!length(pth)){
+        pth <- "True"
+      }
+      
+      # Write row to data.frame
+      names_list <- c(names_list, names[i])
+      covers <- c(covers, cover)
+      pcovers <- c(pcovers, pcover)
+      yvals <- c(yvals, yval)
+      pths <- c(pths, paste(pth, collapse=" & "))
+      if (!rtree){
+        probs <- c(probs, prob)
+      }
+    }
+  }
+  # Compile result dataframe
+  result <- data.frame(names_list, covers, pcovers, yvals, pths)
+  cols <- c("Rule", "SampleNum", "SamplePercent", "Class")
+  if (!rtree){
+    result["probs"] <- probs
+    # Sort dataframe by the precision then by sample num
+    BBmisc::sortByCol(result, c("probs", "covers"), asc=T)
+    cols <- c(cols, "Precision")
+    reordered_cols <- c("names_list", "covers", "pcovers", "yvals", 
+                        "probs", "pths")
+    result <- result[, reordered_cols]
+  }
+  cols <- c(cols, "Splits")
+  colnames(result) <- cols
+  result
 }

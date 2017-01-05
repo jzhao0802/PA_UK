@@ -27,6 +27,9 @@ var_config <- readr::read_csv("data/breast_cancer_var_config2.csv")
 source("palab_model.R")
 df <- get_variables(df, var_config, categorical=T)
 
+# If missing values are present, impute them with median or method="mean"
+# df <- impute_data(df, target, method="median")
+
 # Define target variable column
 target = "Class"
 
@@ -144,8 +147,8 @@ plot_dt(o_models[[1]], pretty=F)
 plot_dt(o_models[[1]], pretty=T)
 
 # Get rules from tree of the first outer fold
-library(rpart.utils)
-dt_rules1 <- rpart.rules.table(o_models[[1]])
+library(rattle)
+get_dt_rules(o_models[[1]])
 
 # This is how to predict with the first model
 predict(res$models[[1]], dataset)
@@ -195,7 +198,7 @@ par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
 plotPartialDependence(par_dep_data)
 
 # Plot partial dependence plot for all patients
-# par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
+# par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
 #                                               all_cols, individual=T)
 # plotPartialDependence(par_dep_data)
 

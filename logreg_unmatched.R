@@ -27,6 +27,9 @@ var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
 source("palab_model.R")
 df <- get_variables(df, var_config)
 
+# If missing values are present, impute them with median or method="mean"
+# df <- impute_data(df, target, method="median")
+
 # Define target variable column
 target = "Class"
 
@@ -67,7 +70,8 @@ m_all <- list(m2, pr5, m3, m4)
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
 # Run nested CV
-res <- resample(lrn, dataset, resampling=outer, models=T, show.info=F, measures=m_all)
+res <- resample(lrn, dataset, resampling=outer, models=T, show.info=F, 
+                measures=m_all)
 parallelStop()
 
 # ------------------------------------------------------------------------------
@@ -75,7 +79,6 @@ parallelStop()
 # ------------------------------------------------------------------------------
 
 # Get summary of results with main stats, and best parameters
-source("palab_model.R")
 results <- get_non_nested_results(res)
 
 # Get detailed results
@@ -160,6 +163,6 @@ par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
 plotPartialDependence(par_dep_data)
 
 # Plot partial dependence plot for all patients
-# par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
+# par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
 #                                               all_cols, individual=T)
 # plotPartialDependence(par_dep_data)
