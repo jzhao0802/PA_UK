@@ -25,6 +25,7 @@ var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
 
 # Make sure to only retain the numerical columns
 source("palab_model.R")
+ids <- get_ids(df, var_config)
 df <- get_variables(df, var_config)
 
 # If missing values are present, impute them with median or method="mean"
@@ -126,7 +127,7 @@ opt_paths <- get_opt_paths(res)
 all_preds <- as.data.frame(res$pred)
 
 # Get all predicted scores and ground truth for only the outer test folds
-o_test_preds <- all_preds[all_preds$set=="test",]
+o_test_preds <- get_outer_preds(res, ids=ids)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -194,12 +195,16 @@ plotPartialDependence(par_dep_data)
 #                                                all_cols, individual=T)
 # plotPartialDependence(par_dep_data)
 
+# Alternatively if you have many columns use this to plot into a multipage pdf
+# plot_partial_deps(lrn_outer_trained, dataset, cols=all_cols, individual=F, 
+#                  output_folder="elasticnet")
+
 # ------------------------------------------------------------------------------
 # Generate hyper parameter plots for every pair of hyper parameters
 # ------------------------------------------------------------------------------
 
 # Plot a performance metric for each pair of hyper parameter, generates .pdf
-plot_hyperpar_pairs(res, "auc.test.mean", output_folder="elasticnet_hypers")
+plot_hyperpar_pairs(res, "auc.test.mean", output_folder="elasticnet")
 
 # If we used a trafo function in the grid add trafo=T
 # plot_hyperpar_pairs(res, "auc.test.mean", trafo=T)

@@ -4,13 +4,15 @@
 #
 # ------------------------------------------------------------------------------
 
+library(dplyr)
+library(mlr)
+library(ggplot2)
+
 # ------------------------------------------------------------------------------
 # Get numeric (or categorical) variables from input dataframe
 # ------------------------------------------------------------------------------
 
 get_variables <- function(input, var_config, categorical=F) {
-  library(dplyr)  
-
   if (categorical){
     accepted_types <- c("numerical", "categorical")
   }else{
@@ -20,17 +22,28 @@ get_variables <- function(input, var_config, categorical=F) {
     dplyr::filter_(~Column %in% colnames(input)) %>%
     dplyr::filter_(~Type %in% accepted_types)
   
-  if (categorical){
-    categoricals <- var_config_accepted %>% filter_(~Type %in% accepted_types)
-  }
-  
   # Keeping only these variables from the input and returning the dataframe
   output <- input %>%
     select_(.dots = var_config_accepted$Column)
   
   # Turning all categorical into factors
-  output[categoricals$Column] <- lapply(output[categoricals$Column], as.factor)
+  if (categorical){
+    categoricals <- var_config_accepted %>% filter_(~Type %in% accepted_types)
+    output[categoricals$Column] <- lapply(output[categoricals$Column], as.factor)
+  }
+  output
+}
+
+# ------------------------------------------------------------------------------
+# Get IDs from the data.frame
+# ------------------------------------------------------------------------------
+
+get_ids <- function(input, var_config){
+  var_config_accepted <- var_config %>% dplyr::filter_(~Type %in% "key")
   
+  # Keeping only the key column
+  output <- input %>%
+    select_(.dots = var_config_accepted$Column)
   output
 }
 
@@ -261,8 +274,6 @@ get_results <- function(results, detailed=F, all_measures=F, write_csv=F){
   #return results object
   to_return
 }
-
-
 # ------------------------------------------------------------------------------
 # Extract results from tuned NON-nested CV model
 # ------------------------------------------------------------------------------
@@ -346,6 +357,21 @@ get_non_nested_results <- function(results, detailed=F, all_measures=F,
   #return results object
   to_return
 }
+
+# ------------------------------------------------------------------------------
+# Get predictions from outer CV models, use original ids if provided
+# ------------------------------------------------------------------------------
+
+get_outer_preds <- function(results, ids=NULL){
+  all_preds <- as.data.frame(results$pred)
+  o_test_preds <- all_preds[all_preds$set=="test",]
+  o_test_preds <- sortByCol(o_test_preds, col="id")
+  if(!is.null(ids)){
+    o_test_preds$id <- ids
+  }
+  o_test_preds
+}
+
 # ------------------------------------------------------------------------------
 # Get paths of the optimized hyper parameters, models and best mean params
 # ------------------------------------------------------------------------------
@@ -374,7 +400,6 @@ get_opt_paths <- function(result){
 get_models <- function(results){
   lapply(res$models, function(x) getLearnerModel(x, more.unwrap=T))
 }
-
 
 get_best_mean_param <- function(results, int=F){
   if (int){
@@ -454,6 +479,21 @@ plot_dt <- function(model, pretty=F){
 }
 
 # ------------------------------------------------------------------------------
+# Create output folder if it doesn't exist
+# ------------------------------------------------------------------------------
+
+create_output_folder <- function(output_folder){
+  if (output_folder == ""){
+    output_folder = getwd()
+  }else{
+    output_folder =file.path(getwd(), output_folder)
+    if (!file.exists(output_folder)){
+      dir.create(output_folder)
+    }
+  }
+}
+
+# ------------------------------------------------------------------------------
 # Plot each hyper-parameter pair and the interpolated performance metric
 # ------------------------------------------------------------------------------
 
@@ -473,14 +513,7 @@ plot_hyperpar_pairs <- function(results, perf_metric, output_folder="", trafo=F)
   all_axes <- t(combn(resdata$hyperparams, 2))
   
   # Check output folder, create it if needed
-  if (output_folder == ""){
-    output_folder = getwd()
-  }else{
-    output_folder =file.path(getwd(), output_folder)
-    if (!file.exists(output_folder)){
-      dir.create(output_folder)
-    }
-  }
+  create_output_folder(output_folder)
   
   # Set default font size
   theme_set(theme_minimal(base_size = 10))
@@ -533,6 +566,38 @@ plot_hyperpar_pairs <- function(results, perf_metric, output_folder="", trafo=F)
 }
 
 # ------------------------------------------------------------------------------
+# Plot partial dependence plots into a multi page pdf
+# ------------------------------------------------------------------------------
+
+plot_partial_deps <- function(model, dataset, cols, individual=F, 
+                              output_folder=""){
+  library(gridExtra)
+  
+  # Check output folder, create it if needed
+  create_output_folder(output_folder)
+  
+  subplots <- list()
+  for (i in 1:length(cols)){
+    if (individual){
+      par_dep_data <- generatePartialDependenceData(model, dataset, cols[i], 
+                                                    individual=T)
+    }else{
+      par_dep_data <- generatePartialDependenceData(model, dataset, cols[i], 
+                                                    fun=median)
+    }
+    plt <- plotPartialDependence(par_dep_data)
+    subplots[[length(subplots)+1]] <- plt
+  }
+  
+  # Save each multiplot of hyper param pair into the output folder
+  main_title <- "Partial dependence plots"
+  file_name <- paste(dataset$task.desc$id, ".pdf", sep='')
+  output_path <- file.path(output_folder, file_name)
+  multiplot <- marrangeGrob(subplots, nrow=3, ncol=3, top=main_title)
+  ggsave(output_path, multiplot)
+}
+
+# ------------------------------------------------------------------------------
 # Calculate odds ratios from the logistic regression coefficients
 # ------------------------------------------------------------------------------
 
@@ -542,7 +607,7 @@ get_odds_ratios <- function(model){
 }
 
 # ------------------------------------------------------------------------------
-# Calculate odds ratios from the logistic regression coefficients
+# Extract rules and precision from decision trees in a data.frame format
 # ------------------------------------------------------------------------------
 
 get_dt_rules <- function(model){

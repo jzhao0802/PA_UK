@@ -9,7 +9,6 @@ library(readr)
 library(parallel)
 library(parallelMap)
 library(ggplot2)
-library(plotmo)
 
 # ------------------------------------------------------------------------------
 # Load data
@@ -25,6 +24,7 @@ var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
 
 # Make sure to only retain the numerical columns
 source("palab_model.R")
+ids <- get_ids(df, var_config)
 df <- get_variables(df, var_config)
 
 # If missing values are present, impute them with median or method="mean"
@@ -98,7 +98,7 @@ results <- get_non_nested_results(res)
 all_preds <- as.data.frame(res$pred)
 
 # Get all predicted scores and ground truth for only the outer test folds
-o_test_preds <- all_preds[all_preds$set=="test",]
+o_test_preds <- get_outer_preds(res, ids=ids)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -166,3 +166,7 @@ plotPartialDependence(par_dep_data)
 # par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
 #                                               all_cols, individual=T)
 # plotPartialDependence(par_dep_data)
+
+# Alternatively if you have many columns use this to plot into a multipage pdf
+# plot_partial_deps(lrn_outer_trained, dataset, cols=all_cols, individual=F, 
+#                  output_folder="elasticnet")0
