@@ -1,0 +1,44 @@
+# ------------------------------------------------------------------------------
+#
+#                      Functions for elastic net and LR
+#
+# ------------------------------------------------------------------------------
+
+library(dplyr)
+library(mlr)
+library(ggplot2)
+
+# ------------------------------------------------------------------------------
+# Plot regularisation path for glmnet
+# ------------------------------------------------------------------------------
+
+plot_reg_path_glmnet <- function(results){
+  # Plots the regularisation paths for each model in the outer folds.
+  library(plotmo)
+  
+  # Setup the plot
+  outer_fold_n <- length(results$models)
+  num_rows <- ceiling((outer_fold_n)/2)
+  par(mfrow=c(num_rows, 2))
+  
+  for (i in 1:outer_fold_n){
+    # Get best lambda and model
+    best_lambda <- results$best_params$s[i]
+    model <- getLearnerModel(results$models[[i]], more.unwrap = T)
+    title <- paste("Outer fold", as.character(i))
+    # Plot regularisation path with the best lambda=s chosen by CV
+    plotmo::plot_glmnet(model, label=T, s=best_lambda, main=title)
+  }
+  # Plot regularisation path with labels for only 5 variables, and add grid
+  # plotmo::plot_glmnet(model, label=5, s=best_lambda, grid.col="lightgrey")
+  par(mfrow=c(1,1))
+}
+
+# ------------------------------------------------------------------------------
+# Calculate odds ratios from the logistic regression coefficients
+# ------------------------------------------------------------------------------
+
+get_odds_ratios <- function(model){
+  # For details see here: http://www.ats.ucla.edu/stat/r/dae/logit.htm
+  exp(cbind(OR = coef(model), confint(model)))
+}
