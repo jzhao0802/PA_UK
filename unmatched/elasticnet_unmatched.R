@@ -24,7 +24,7 @@ df <- readr::read_csv("data/breast_cancer.csv")
 var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
 
 # Make sure to only retain the numerical columns
-source("palab_model.R")
+source("palab_model/palab_model.R")
 ids <- get_ids(df, var_config)
 df <- get_variables(df, var_config)
 
@@ -174,8 +174,8 @@ theme_set(theme_minimal(base_size=10))
 
 # Define performance metrics we want to plot, ppv=precision, tpr=recall
 perf_to_plot <- list(fpr, tpr, ppv, mmce)
-# Generate the data for the plots
-thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot)
+# Generate the data for the plots, do aggregate=T if you want the mean
+thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
 
 # ------------------------------------------------------------------------------

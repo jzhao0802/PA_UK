@@ -23,7 +23,7 @@ df <- readr::read_csv("data/breast_cancer.csv")
 var_config <- readr::read_csv("data/breast_cancer_var_config2.csv")
 
 # RF can handle categorical variables, so we'll keep those as well
-source("palab_model.R")
+source("palab_model/palab_model.R")
 ids <- get_ids(df, var_config)
 df <- get_variables(df, var_config, categorical=T)
 
@@ -183,7 +183,7 @@ theme_set(theme_minimal(base_size=10))
 # Define performance metrics we want to plot, ppv=precision, tpr=recall
 perf_to_plot <- list(fpr, tpr, ppv, mmce)
 # Generate the data for the plots
-thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot)
+thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
 
 # ------------------------------------------------------------------------------
