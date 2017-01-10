@@ -60,7 +60,8 @@ ps <- makeParamSet(
 # Setup rest of the nested CV in mlR
 # ------------------------------------------------------------------------------
 
-# Define random grid search with 100 interation per outer fold.
+# Define random grid search with 100 interation per outer fold. Tune.threshold=T
+# tunes the classifier's decision threshold but it takes forever -> downsample.
 ctrl <- makeTuneControlRandom(maxit=50L, tune.threshold=F)
 
 # Define outer and inner resampling strategies
@@ -85,7 +86,8 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # Run training with nested CV
 # ------------------------------------------------------------------------------
 
-# Setup parallelization
+# Setup parallelization - if you run this on cluster, use at most 2 instead of 
+# detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
 # Run nested CV
@@ -129,17 +131,20 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 plot_pr_curve(res)
 
 # ------------------------------------------------------------------------------
-# Get models from outer folds and their params and predictions
+# Get models from outer folds and plot their variable importances
 # ------------------------------------------------------------------------------
 
 # Get tuned models for each outer fold
 o_models <- get_models(res)
 
-# Get variable importance for 1st model
-o_models[[1]]$variable.importance
+# Get percentage VI table with direction of association as correlation
+get_vi_table(o_models[[1]], dataset)
 
-# Plot variable importance across outer fold moldes
-plot_all_rf_vi(res)
+# Plot variable importance across outer fold moldes, for mean do aggregate=T
+plot_all_rf_vi(res, aggregate=F)
+
+# Alternatively here's a simpler plot
+plot_all_rf_vi_simple(res)
 
 # Find out where the actual splits happened
 o_models[[1]]$splits
@@ -172,8 +177,8 @@ lrn_outer_model <-getLearnerModel(lrn_outer_trained, more.unwrap=T)
 # Plot regularisation path of the averaged model.
 plot_rf_vi(lrn_outer_model, title="Average model")
 
-# Accessing params just like above
-lrn_outer_model$variable.importance
+# Get percentage VI table with direction of association as correlation
+get_vi_table(lrn_outer_model, dataset)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance
@@ -210,6 +215,12 @@ plotPartialDependence(par_dep_data)
 # Alternatively if you have many columns use this to plot into a multipage pdf
 # plot_partial_deps(lrn_outer_trained, dataset, cols=all_cols, individual=F, 
 #                  output_folder="elasticnet")
+
+# Fit linear model to each plot and return the beta, i.e. slope
+get_par_dep_plot_slopes(par_dep_data, decimal=5)
+
+# Plot them to easily see the influence of each variable
+plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 
 # ------------------------------------------------------------------------------
 # Generate hyper parameter plots for every pair of hyper parameters

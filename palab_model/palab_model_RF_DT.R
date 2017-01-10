@@ -9,10 +9,83 @@ library(mlr)
 library(ggplot2)
 
 # ------------------------------------------------------------------------------
-# Plot variable importances for all the outer folds
+# Get and plot variable importances for all the outer folds
 # ------------------------------------------------------------------------------
 
-plot_all_rf_vi <- function(results){
+get_vi_table <- function(model, dataset, decimal=3){
+  if (is(model, "TuneModel")){
+    model <- getLearnerModel(model, more.unwrap = T)
+  }
+  vi <- model$variable.importance
+  vi <- sort(vi/sum(vi)*100, decreasing=T)
+  vi <- data.frame(VI=vi)
+  
+  # Calculate correlation between predictors and outcome
+  target <- dataset$task.desc$target
+  data <- getTaskData(dataset)
+  y <- as.numeric(unlist(data[target]))
+  X <- data_without_target(data, target)
+  r <- unlist(lapply(X, function(x) cor(as.numeric(x), y)))
+  r <- data.frame(r)
+  
+  # Merge data with correlation values after sorting by rownames
+  vi$Corr <- r[rownames(vi),]
+  decimal_rounder(vi, decimal)
+}
+
+plot_all_rf_vi <- function(results, decimal=2, aggregate=F){
+  library(scales)
+
+  outer_fold_n <- length(results$models)
+  vis <- c()
+  iters <- c()
+  vars <- c()
+  
+  for (i in 1:outer_fold_n){
+    model <- getLearnerModel(results$models[[i]], more.unwrap = T)
+    vi <- as.numeric(model$variable.importance)
+    vi <- vi/sum(vi)*100
+    vis <- c(vis, vi)
+    vars <- c(vars, names(model$variable.importance))
+    iters <- c(iters, rep(i, length(vi)))
+  }
+  
+  # Collate variable importances into one data.frame and format long floats
+  data <- data.frame(VI=vis, Outer=factor(iters), Vars=vars)
+  data <- decimal_rounder(data, decimal)
+  
+  # Sort data by average VI across folds
+  average_vi_order <- data %>% 
+    group_by(Vars) %>% 
+    summarise(mean_VI=mean(VI), sd_VI=sd(VI)) %>% 
+    arrange(desc(mean_VI))
+  data$Vars <- factor(data$Vars, levels=average_vi_order$Vars)
+  
+  if (aggregate){
+    colnames(average_vi_order) <- c("Vars", "VI", "SD")
+    average_vi_order$Vars <- factor(average_vi_order$Vars, 
+                                    levels=average_vi_order$Vars)
+    average_vi_order <- decimal_rounder(average_vi_order, decimal)
+    # Plot it as barplot with error bars
+    ggplot(average_vi_order, aes(x=Vars)) +
+      geom_bar(stat="identity", aes(y=VI), position="dodge") +
+      geom_text(aes(x=Vars, y=VI-SD*1.1, label=paste0(VI, "%"), 
+                    hjust=ifelse(sign(VI)>0, 1, 0)), 
+                position=position_dodge(width=1)) +
+      geom_errorbar(aes(ymax=VI+SD, ymin=VI-SD), width=0.25) +
+      coord_flip()
+  }else{
+    # Plot it as stacked barplots with ggplot
+    ggplot(data, aes(x=Vars, fill=Outer)) +
+      geom_bar(stat="identity", aes(y=VI), position="dodge") +
+      geom_text(aes(x=Vars, y=VI, label=paste0(VI, "%"), 
+                    hjust=ifelse(sign(VI)>0, 1, 0)), 
+                position=position_dodge(width=1)) +
+      coord_flip()
+  }
+}
+
+plot_all_rf_vi_simple <- function(results){
   # Plots the variable importances of RF models
   # Setup the plot
   outer_fold_n <- length(results$models)
@@ -28,7 +101,11 @@ plot_all_rf_vi <- function(results){
   par(mfrow=c(1,1))
 }
 
-plot_rf_vi <- function(model, title){
+plot_rf_vi <- function(model, title=''){
+  if (is(model, "TuneModel")){
+    model <- getLearnerModel(model, more.unwrap = T)
+  }
+  par(mar=c(5.1,10.1,4.1,2.1))
   vi <- model$variable.importance
   vi <- vi/max(vi)
   barplot(sort(vi), horiz = T, las=2, main=title)

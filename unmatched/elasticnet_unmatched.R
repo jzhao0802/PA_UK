@@ -66,7 +66,8 @@ ps <- makeParamSet(
 # For Lasso penalty do:
 # lrn <- setHyperPars(lrn, alpha=1)
 
-# Define random grid search with 100 interation per outer fold.
+# Define random grid search with 100 interation per outer fold. Tune.threshold=T
+# tunes the classifier's decision threshold but it takes forever -> downsample.
 ctrl <- makeTuneControlRandom(maxit=50L, tune.threshold=F)
 
 # Define outer and inner resampling strategies
@@ -91,7 +92,8 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # Run training with nested CV
 # ------------------------------------------------------------------------------
 
-# Setup parallelization
+# Setup parallelization - if you run this on cluster, use at most 2 instead of 
+# detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
 # Run nested CV
@@ -149,8 +151,8 @@ coef(o_models[[1]], s=best_lambda)
 # Plot the regularsation paths for all models, note how different the 3 s
 plot_reg_path_glmnet(res, n_feat="all")
 
-# If the labels of variables are too crowded change to n_feat=10
-plot_reg_path_glmnet(res, n_feat=10)
+# If the labels of variables are too crowded change to n_feat=5
+plot_reg_path_glmnet(res, n_feat=5)
 
 # This is how to predict with the first model
 predict(res$models[[1]], dataset)
@@ -200,9 +202,9 @@ par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
 plotPartialDependence(par_dep_data)
 
 # Note only 3 predictors remain which are completely linear and not as above
-par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
+par_dep_data2 <- generatePartialDependenceData(lrn_outer_trained, dataset,
                                               all_cols, fun=median)
-plotPartialDependence(par_dep_data)
+plotPartialDependence(par_dep_data2)
 
 # Plot partial dependence plot for all patients
 # par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
@@ -212,6 +214,12 @@ plotPartialDependence(par_dep_data)
 # Alternatively if you have many columns use this to plot into a multipage pdf
 # plot_partial_deps(lrn_outer_trained, dataset, cols=all_cols, individual=F, 
 #                  output_folder="elasticnet")
+
+# Fit linear model to each plot and return the beta, i.e. slope
+get_par_dep_plot_slopes(par_dep_data, decimal=5)
+
+# Plot them to easily see the influence of each variable
+plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 
 # ------------------------------------------------------------------------------
 # Generate hyper parameter plots for every pair of hyper parameters

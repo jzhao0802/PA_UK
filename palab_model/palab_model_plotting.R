@@ -111,3 +111,44 @@ plot_partial_deps <- function(model, dataset, cols, individual=F,
   multiplot <- marrangeGrob(subplots, nrow=3, ncol=3, top=main_title)
   ggsave(output_path, multiplot)
 }
+
+# ------------------------------------------------------------------------------
+# Get linear fit of partial dependence plots and plot these as barplots
+# ------------------------------------------------------------------------------
+
+get_par_dep_plot_slopes <- function(par_dep_data, decimal=5){
+  data <- par_dep_data$data
+  data_without_probs <- data[, 3:ncol(data)]
+  
+  # Fit linear model to each column with the predicted probability as outcome
+  get_beta <- function(col){
+    non_nan <- !is.na(col)
+    model <- lm(data$Probability[non_nan] ~ col[non_nan])
+    beta <- coef(summary(model))[2,]
+  }
+  betas <- lapply(data_without_probs, get_beta)
+  
+  # Make data frame out of models and format it nicely
+  betas <- as.data.frame(t(as.data.frame(betas)))
+  betas$names <- rownames(betas)
+  rownames(betas) <- NULL
+  colnames(betas) <- c("Beta", "Std", "Tval", "Pval", "Vars")
+  betas <- betas[, c("Vars", "Beta", "Std", "Tval", "Pval")]
+  is.num <- sapply(betas, is.numeric)
+  betas <- decimal_rounder(betas, decimal)
+  #This is so ggplot preservs the order of the bars
+  betas$Vars <- factor(betas$Vars, levels=betas$Vars)
+  betas
+}
+
+plot_par_dep_plot_slopes <- function(par_dep_data, decimal=5){
+  betas <- get_par_dep_plot_slopes(par_dep_data, decimal=decimal)
+  ggplot(betas, aes(x = Vars)) +
+    geom_bar(stat="identity", aes(y=Beta), position="dodge") +
+    geom_text(aes(x=Vars, y=Beta-Std*1.1, label=Pval, 
+                  hjust=ifelse(sign(Beta)>0, 1, 0)), 
+                  position = position_dodge(width=1)) +
+    geom_errorbar(aes(ymax=Beta+Std, ymin=Beta-Std), width=0.25) +
+    coord_flip()
+  
+}

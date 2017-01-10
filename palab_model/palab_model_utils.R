@@ -93,6 +93,16 @@ impute_data <- function(df, target, method="median"){
 }
 
 # ------------------------------------------------------------------------------
+# Round all numeric values in a dataframe to a given decimal digits
+# ------------------------------------------------------------------------------
+
+decimal_rounder <- function(df, decimal=5){
+  is.num <- sapply(df, is.numeric)
+  df[is.num] <- lapply(df[is.num], round, decimal)
+  df
+}
+
+# ------------------------------------------------------------------------------
 # Timing functions
 # ------------------------------------------------------------------------------
 

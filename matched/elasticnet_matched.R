@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#     Nested unmatched CV with elastic net penalized logistic regression
+#     Nested matched CV with elastic net penalized logistic regression
 #
 # ------------------------------------------------------------------------------
 
@@ -111,7 +111,7 @@ m_all <- list(pr10, m2, m3, m4)
 # Tune outer folds
 # ------------------------------------------------------------------------------
 
-tune_outer_fold <- function(ncv, data, target, i){
+tune_outer_fold <- function(ncv, data, target, i, positive=1){
   
   get_inner_folds <- function(train_fold_ncv){
     # This function takes in a nested cv matched dataframe, and generates an mlR
@@ -131,7 +131,7 @@ tune_outer_fold <- function(ncv, data, target, i){
     # fine because the matching is already done and preserved across inner folds
     train_fold_ncv$id = 1:nrow(train_fold_ncv)
     
-    # overwrite the predefined mlR resampling indices, with ncv indices
+    # Overwrite the predefined mlR resampling indices, with ncv indices
     for (i in 1:inner_fold_n){
       test_ix = which(train_fold_ncv$inner_fold == i)
       train_ix = which(train_fold_ncv$inner_fold != i) 
@@ -146,12 +146,12 @@ tune_outer_fold <- function(ncv, data, target, i){
   # define test and train datasets in the outer fold and print them
   test_fold_ncv <- ncv[ncv$outer_fold == i,]
   test_fold_ids <- test_fold_ncv$id
-  test_data <- makeClassifTask(id="tes", data=data[test_fold_ids,], 
-                               target=target)
+  test_data <- makeClassifTask(id="test", data=data[test_fold_ids,], 
+                               target=target, positive=positive)
   train_fold_ncv <- ncv[ncv$outer_fold != i,]
   train_fold_ids <- train_fold_ncv$id
-  train_data <- makeClassifTask(id="tr", data=data[train_fold_ids,], 
-                                target=target)
+  train_data <- makeClassifTask(id="train", data=data[train_fold_ids,], 
+                                target=target, positive=positive)
   
   # get mlR resampling instance overwritten with predefined indices
   inner_sampling <- get_inner_folds(train_fold_ncv)

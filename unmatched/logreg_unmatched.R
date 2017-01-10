@@ -65,7 +65,8 @@ m_all <- list(pr10, m2, m3, m4)
 # Run training with nested CV
 # ------------------------------------------------------------------------------
 
-# Setup parallelization
+# Setup parallelization - if you run this on cluster, use at most 2 instead of 
+# detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
 # Run nested CV
@@ -175,4 +176,10 @@ plotPartialDependence(par_dep_data)
 
 # Alternatively if you have many columns use this to plot into a multipage pdf
 # plot_partial_deps(lrn_outer_trained, dataset, cols=all_cols, individual=F, 
-#                  output_folder="elasticnet")0
+#                  output_folder="elasticnet")
+
+# Fit linear model to each plot and return the beta, i.e. slope
+get_par_dep_plot_slopes(par_dep_data, decimal=5)
+
+# Plot them to easily see the influence of each variable
+plot_par_dep_plot_slopes(par_dep_data, decimal=5)
