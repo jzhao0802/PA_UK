@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#       Nested unmatched CV with elastic net penalized elastic net
+#                  Nested unmatched CV with decision trees
 #
 # ------------------------------------------------------------------------------
 
@@ -37,8 +37,8 @@ target = "Class"
 # Setup dataset and decision tree in mlR
 # ------------------------------------------------------------------------------
 
-# Setup the classification task in mlR
-dataset <- makeClassifTask(id="BreastCancer", data=df, target=target)
+# Setup the classification task in mlR, explicitely define positive class
+dataset <- makeClassifTask(id="BreastCancer", data=df, target=target, positive=1)
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -70,13 +70,12 @@ outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
 inner <- makeResampleDesc("CV", iters=3, stratify=T)
 
 # Define performane metrics
-pr5 <- make_custom_pr_measure(5, "pr5")
+pr10 <- make_custom_pr_measure(10, "pr10")
 m2 <- auc
-m3 <- setAggregation(pr5, test.sd)
+m3 <- setAggregation(pr10, test.sd)
 m4 <- setAggregation(auc, test.sd)
 # It's always the first in the list that's used to rank hyper-params in tuning.
-# We tune auc here, because partial dependence plots are non-sensical with pr5.
-m_all <- list(m2, pr5, m3, m4)
+m_all <- list(pr10, m2, m3, m4)
 
 # Define wrapped learner: this is mlR's way of doing nested CV on a learner
 lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
@@ -123,6 +122,11 @@ all_preds <- as.data.frame(res$pred)
 # Get all predicted scores and ground truth for only the outer test folds
 o_test_preds <- get_outer_preds(res, ids=ids)
 
+# ------------------------------------------------------------------------------
+# Plot precision-recall curve. Note, it's coming from 3 models
+# ------------------------------------------------------------------------------
+
+plot_pr_curve(res)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions

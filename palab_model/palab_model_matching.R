@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#   Functions for getting nested CV index table with matching samples
+#   Functions for simulating matching and generating nested CV indices
 #
 # ------------------------------------------------------------------------------
 

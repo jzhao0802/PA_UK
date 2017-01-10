@@ -55,7 +55,8 @@ test_nested_cv_matched <- function(){
   neg_ix <- base::setdiff(id, pos_ix)
   match[neg_ix] = rep(match[pos_ix], 10)[1:length(neg_ix)]
   match_df = data.frame(id, match)
-
+  
+  # helper functions to make the print out more readable
   print_break_line <- function(){
     cat("-------------------------------------------------------------------\n")
   }
@@ -78,7 +79,7 @@ test_nested_cv_matched <- function(){
   print(data.frame(id, match, target_col))
   
   # load matching cv creator function: outer 3-fold, inner 3-fold
-  source("palab_matching.R")
+  source("palab_model/palab_model_matching.R")
   ncv <- nested_cv_matched_ix(match_df, outer_fold_n=3, inner_fold_n=3, 
                               shuffle=F)
   print_break_line()

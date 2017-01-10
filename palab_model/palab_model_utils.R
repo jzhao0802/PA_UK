@@ -127,21 +127,31 @@ make_custom_pr_measure <- function(recall_perc=5, name_str="pr5"){
     
     # see docs here: https://cran.r-project.org/web/packages/PRROC/PRROC.pdf
     # the positive class has to be 1, and the negative has to be 0.
-    scores = getPredictionProbabilities(pred)
-    labels = as.numeric(factor(getPredictionTruth(pred)))-1
-    pr <- pr.curve(scores.class0=scores, weights.class0=labels, curve = T)
+    positive_class <- pred$task.desc$positive
+    prob = getPredictionProbabilities(pred, cl=positive_class)
+    
+    # get truth and turn it into ones (positive) and zeros (negative)
+    truth <- getPredictionTruth(pred)
+    if (is.factor(truth)) {
+      pos_ix <- as.integer(truth) == which(levels(truth) == positive_class)
+    } else {
+      pos_ix <- truth == positive_class
+    }
+    truth <- as.integer(pos_ix)
+    pr <- pr.curve(scores.class0=prob, weights.class0=truth, curve = T)
     
     # extract recall and precision from the curve of PRROC package's result
-    recall = pr$curve[,1]
-    prec = recall = pr$curve[,2]
+    recall <- pr$curve[,1]
+    prec <- pr$curve[,2]
     
     # find closes recall value(s)
-    target_recall = recall_perc/100
+    target_recall <- recall_perc/100
     recall_diff <- abs(recall - target_recall)
     # find indice for this (these)
     recall_min_ix <- which(recall_diff == min(recall_diff))
     # find corresponding highest precision
     max(prec[recall_min_ix])
+    
   }
   
   name <- paste("Precision at ", as.character(recall_perc),"%"," recall", sep='')
@@ -157,6 +167,48 @@ make_custom_pr_measure <- function(recall_perc=5, name_str="pr5"){
     }
   )
   custom_measure
+}
+
+# ------------------------------------------------------------------------------
+# Plot precision recall and ROC curve
+# ------------------------------------------------------------------------------
+
+get_truth_pred <- function(pred){
+  # This helper function could not have been used in make_custom_pr_measure()
+  # because it was not in scope. 
+  positive_class <- pred$task.desc$positive
+  prob = getPredictionProbabilities(pred, cl=positive_class)
+  
+  # get truth and turn it into ones (positive) and zeros (negative)
+  truth <- getPredictionTruth(pred)
+  if (is.factor(truth)) {
+    pos_ix <- as.integer(truth) == which(levels(truth) == positive_class)
+  } else {
+    pos_ix <- truth == positive_class
+  }
+  truth <- as.integer(pos_ix)
+  results <- list("truth"=truth, "prob"=prob)
+  results
+}
+
+plot_pr_curve <- function(results, roc=TRUE){
+  # Get probabilities and truth
+  tb <- get_truth_pred(results$pred)
+  
+  # Retain only the predictions on the test set
+  df <- as.data.frame(results$pred)
+  truth <- tb$truth[df$set=="test"]
+  prob <- tb$prob[df$set=="test"]
+  
+  # Plot ROC curve first so it's the 2nd plot once this function is run
+  if (roc){
+    roc <- roc.curve(scores.class0=prob, weights.class0=truth, curve = T)
+    plot(roc)
+  }
+  
+  # Plot PR curve
+  pr <- pr.curve(scores.class0=prob, weights.class0=truth, curve = T)
+  plot(pr)
 }
 
 # ------------------------------------------------------------------------------

@@ -4,15 +4,11 @@
 #
 # ------------------------------------------------------------------------------
 
-library(dplyr)
-library(mlr)
-library(ggplot2)
-
 # ------------------------------------------------------------------------------
 # Plot regularisation path for glmnet
 # ------------------------------------------------------------------------------
 
-plot_reg_path_glmnet <- function(results){
+plot_reg_path_glmnet <- function(results, n_feat="all"){
   # Plots the regularisation paths for each model in the outer folds.
   library(plotmo)
   
@@ -23,14 +19,18 @@ plot_reg_path_glmnet <- function(results){
   
   for (i in 1:outer_fold_n){
     # Get best lambda and model
-    best_lambda <- results$best_params$s[i]
+    best_lambda <- results$models[[i]]$learner.model$opt.result$x$s
     model <- getLearnerModel(results$models[[i]], more.unwrap = T)
     title <- paste("Outer fold", as.character(i))
+    
     # Plot regularisation path with the best lambda=s chosen by CV
-    plotmo::plot_glmnet(model, label=T, s=best_lambda, main=title)
+    if (n_feat == "all"){
+      plotmo::plot_glmnet(model, label=T, s=best_lambda, main=title)
+    }else{
+      plotmo::plot_glmnet(model, label=n_feat, s=best_lambda, main=title)
+      # grid.col="lightgrey" adds grid to the plits
+    }
   }
-  # Plot regularisation path with labels for only 5 variables, and add grid
-  # plotmo::plot_glmnet(model, label=5, s=best_lambda, grid.col="lightgrey")
   par(mfrow=c(1,1))
 }
 
