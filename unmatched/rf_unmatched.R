@@ -16,7 +16,8 @@ library(ggplot2)
 
 # Set seed and ensure results are reproducible even with parallelization, see 
 # here: https://github.com/mlr-org/mlr/issues/938
-set.seed(123, "L'Ecuyer")
+random_seed <- 123
+set.seed(random_seed, "L'Ecuyer")
 
 # Load breast cancer dataset and var_config
 df <- readr::read_csv("data/breast_cancer.csv")
@@ -85,7 +86,8 @@ ps <- makeParamSet(
 
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
 # tunes the classifier's decision threshold but it takes forever -> downsample.
-ctrl <- makeTuneControlRandom(maxit=50L, tune.threshold=F)
+random_search_iter <- 50L
+ctrl <- makeTuneControlRandom(maxit=random_search_iter, tune.threshold=F)
 
 # Define outer and inner resampling strategies
 outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
@@ -94,7 +96,8 @@ outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
 inner <- makeResampleDesc("CV", iters=3, stratify=T)
 
 # Define performane metrics
-pr10 <- make_custom_pr_measure(10, "pr10")
+recall <- 10
+pr10 <- make_custom_pr_measure(recall, "pr10")
 m2 <- auc
 m3 <- setAggregation(pr10, test.sd)
 m4 <- setAggregation(auc, test.sd)
@@ -123,7 +126,9 @@ parallelStop()
 # ------------------------------------------------------------------------------
 
 # Get summary of results with main stats, and best parameters
-results <- get_results(res)
+extra <- list("ElapsedTime(secs)"=res$runtime, "RandomSeed"=random_seed, 
+              "Recall"=recall, "IterationsPerFold"=random_search_iter)
+results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
 
 # Get detailed results
 # results <- get_results(res, detailed=T)

@@ -136,6 +136,7 @@ get_par_dep_plot_slopes <- function(par_dep_data, decimal=5){
   betas <- betas[, c("Vars", "Beta", "Std", "Tval", "Pval")]
   is.num <- sapply(betas, is.numeric)
   betas <- decimal_rounder(betas, decimal)
+  betas <- sortByCol(betas, "Beta", asc=F)
   #This is so ggplot preservs the order of the bars
   betas$Vars <- factor(betas$Vars, levels=betas$Vars)
   betas

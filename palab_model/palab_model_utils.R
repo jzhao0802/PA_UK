@@ -229,7 +229,7 @@ create_output_folder <- function(output_folder){
   if (output_folder == ""){
     output_folder = getwd()
   }else{
-    output_folder =file.path(getwd(), output_folder)
+    output_folder = file.path(getwd(), output_folder)
     if (!file.exists(output_folder)){
       dir.create(output_folder)
     }

@@ -16,7 +16,8 @@ library(ggplot2)
 
 # Set seed and ensure results are reproducible even with parallelization, see 
 # here: https://github.com/mlr-org/mlr/issues/938
-set.seed(123, "L'Ecuyer")
+random_seed <- 123
+set.seed(random_seed, "L'Ecuyer")
 
 # Load breast cancer dataset and var_config
 df <- readr::read_csv("data/breast_cancer.csv")
@@ -54,7 +55,8 @@ lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
 outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
 
 # Define performane metrics
-pr10 <- make_custom_pr_measure(10, "pr10")
+recall <- 10
+pr10 <- make_custom_pr_measure(recall, "pr10")
 m2 <- auc
 m3 <- setAggregation(pr10, test.sd)
 m4 <- setAggregation(auc, test.sd)
@@ -79,7 +81,9 @@ parallelStop()
 # ------------------------------------------------------------------------------
 
 # Get summary of results with main stats, and best parameters
-results <- get_non_nested_results(res)
+extra <- list("ElapsedTime(secs)"=res$runtime, "RandomSeed"=random_seed, 
+              "Recall"=recall)
+results <- get_non_nested_results(res, extra=extra, decimal=5)
 
 # Get detailed results
 # results <- get_non_nested_results(res, detailed=T)
