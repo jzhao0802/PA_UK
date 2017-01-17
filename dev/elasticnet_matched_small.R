@@ -99,7 +99,20 @@ m4 <- setAggregation(auc, test.sd)
 # It's always the first in the list that's used to rank hyper-params in tuning.
 m_all <- list(pr10, m2, m3, m4)
 
+# ------------------------------------------------------------------------------
+# Run training with nested CV
+# ------------------------------------------------------------------------------
+
+# Setup parallelization - if you run this on cluster, use at most 2 instead of 
+# detectCores() so you don't take up all CPU resources on the server.
+
+parallelStartSocket(detectCores(), level="mlr.tuneParams")
 res <- palab_resample(lrn, dataset, ncv, ps, ctrl, m_all, show_info=F)
+parallelStop()
+
+# ------------------------------------------------------------------------------
+# Get results summary and all tried parameter combinations
+# ------------------------------------------------------------------------------
 
 extra <- list("ElapsedTime(secs)"=res$runtime, "RandomSeed"=123)
 results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)

@@ -52,7 +52,8 @@ match_df = data.frame(id, match)
 # Define nested CV with maching: outer 3-fold, inner 3-fold
 ncv <- nested_cv_matched_ix(match_df, outer_fold_n=3, inner_fold_n=3, shuffle=F)
 
-# Add it to df and save it
+# Add ncv to df and save it
+df["match"] <- df$ID[ncv$match]
 df["outer_fold"] <- ncv$outer_fold
 df["inner_fold"] <- ncv$inner_fold
 readr::write_csv(df, "~/PAlab/palab_model/data/breast_cancer_matched.csv")
