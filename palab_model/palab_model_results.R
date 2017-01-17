@@ -344,7 +344,7 @@ get_opt_paths <- function(result){
 }
 
 get_models <- function(results){
-  lapply(res$models, function(x) getLearnerModel(x, more.unwrap=T))
+  lapply(results$models, function(x) getLearnerModel(x, more.unwrap=T))
 }
 
 get_best_mean_param <- function(results, int=F){

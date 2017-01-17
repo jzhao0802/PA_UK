@@ -163,7 +163,7 @@ tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures,
   list(
     measures_test = ms_test,
     measures_train = ms_train,
-    model = wrapped_m,
+    model = lrn_outer,
     pred_test = pred_test,
     pred_train = pred_train,
     err_msgs = err_msgs,
