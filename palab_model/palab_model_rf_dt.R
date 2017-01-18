@@ -86,7 +86,6 @@ plot_all_rf_vi <- function(results, decimal=2, aggregate=F){
 }
 
 plot_all_rf_vi_simple <- function(results){
-  # Plots the variable importances of RF models
   # Setup the plot
   outer_fold_n <- length(results$models)
   num_rows <- ceiling((outer_fold_n)/2)
@@ -96,12 +95,12 @@ plot_all_rf_vi_simple <- function(results){
   for (i in 1:outer_fold_n){
     model <- getLearnerModel(results$models[[i]], more.unwrap = T)
     title <- paste("Outer fold", as.character(i))
-    plot_rf_vi(model, title)
+    plot_rf_vi(model, title, subplot=TRUE)
   }
   par(mfrow=c(1,1))
 }
 
-plot_rf_vi <- function(model, title=''){
+plot_rf_vi <- function(model, title='', subplot=FALSE){
   if (is(model, "TuneModel")){
     model <- getLearnerModel(model, more.unwrap = T)
   }
@@ -109,7 +108,11 @@ plot_rf_vi <- function(model, title=''){
   vi <- model$variable.importance
   vi <- vi/max(vi)
   barplot(sort(vi), horiz = T, las=2, main=title)
-  par(mfrow=c(1,1))
+  
+  # If this is just one plot and not part of a multiplot, reset faceting
+  if (!subplot){
+    par(mfrow=c(1,1))
+  }
 }
 
 # ------------------------------------------------------------------------------

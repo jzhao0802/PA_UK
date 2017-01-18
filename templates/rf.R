@@ -15,7 +15,7 @@ library(ggplot2)
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = FALSE
+matching = TRUE
 
 # Define dataset and var_config paths
 if (matching){
@@ -80,18 +80,24 @@ lrn <- makeLearner("classif.ranger", predict.type="prob", predict.threshold=0.5)
 # Cheaper than OOB/permutation estimation of feature importance
 lrn <- setHyperPars(lrn, importance="impurity")
 
-# Make sure we sample according to inverse class frequence
-target_f <- as.factor(df[[target]])
-target_f_sum <- table(target_f)
-inverse_weights <- 1/(target_f_sum/sum(target_f_sum))
-# Replace each class with its inverse weight
-target_iw <- unlist(lapply(target_f, function(x) inverse_weights[x]))
-# Not yet implemented by mlR, but hopefully soon will be, raised issue on github
-# lrn <- setHyperPars(lrn, case.weights=target_iw)
+# Make sure we sample according to inverse class frequency
+inverse_weights <- 1/get_class_freqs(dataset)
+target_vals <- getTaskTargets(dataset)
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+# Understand weights better, related to tune_outer_fold()
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+dataset$weights <- as.numeric(unlist(lapply(target_vals, 
+                                            function(x) inverse_weights[x])))
 
 # Define range of mtry we will search over
 features_n <- sum(dataset$task.desc$n.feat) 
-mtry_default <- floor(sqrt(features_n))
+mtry_default <- round(sqrt(features_n))
 # +/-25% from the default value
 mtry_range <- .25
 mtry_lower <- max(1, round(mtry_default * (1 - mtry_range)))

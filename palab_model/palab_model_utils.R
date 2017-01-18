@@ -148,20 +148,44 @@ make_custom_pr_measure <- function(recall_perc=5, name_str="pr5"){
       pos_ix <- truth == positive_class
     }
     truth <- as.integer(pos_ix)
-    pr <- pr.curve(scores.class0=prob, weights.class0=truth, curve = T)
     
-    # extract recall and precision from the curve of PRROC package's result
-    recall <- pr$curve[,1]
-    prec <- pr$curve[,2]
+    # Create desc sorted table of probs and truth
+    df <- data.frame(truth, prob)
+    df_pos <- df[which(df$truth == 1),]
+    df_pos <- BBmisc::sortByCol(df_pos, "prob", asc=F)
+    pos_N <- nrow(df_pos)
     
-    # find closes recall value(s)
-    target_recall <- recall_perc/100
-    recall_diff <- abs(recall - target_recall)
-    # find indice for this (these)
-    recall_min_ix <- which(recall_diff == min(recall_diff))
-    # find corresponding highest precision
-    max(prec[recall_min_ix])
+    # Find the right threshold for x% recall, by walking through the probs in
+    # the df_pos table and using each as a thrsh to calculate recall
+    recall_tmp <- 0
+    thrsh_tmp <- 0
+    ix <- 1
+    recall_target <- recall_perc/100
+    while (recall_tmp < recall_target){
+      # To make sure we pick the thrsh_tmp that leads us the closest to the 
+      # desired recall level
+      recall_tmp2 <- recall_tmp
+      thrsh_tmp2 <- thrsh_tmp
+      # Threshold we'll try
+      thrsh_tmp <- df_pos$prob[ix]
+      # Predictions that this threshold translates to
+      pred_tmp <- as.numeric(df$prob >= thrsh_tmp)
+      # Calculate true positive rate = recall
+      recall_tmp <- sum(pred_tmp)/pos_N
+      ix <- ix + 1
+    }
     
+    # Two closest recall levels
+    recall_tmps <- c(recall_tmp, recall_tmp2)
+    # Two corresponding thresholds
+    thrsh_tmps <- c(thrsh_tmp, thrsh_tmp2)
+    recall_diff <- abs(recall_tmps - recall_target)
+    # Threshold to use in precision calculation
+    thrsh <- thrsh_tmps[which(recall_diff == min(recall_diff))]
+    # Find precision at this threshold
+    tp <- sum(df$truth[df$prob >= thrsh])
+    pred_n <- sum(df$prob >= thrsh)
+    tp/pred_n
   }
   
   name <- paste("Precision at ", as.character(recall_perc),"%"," recall", sep='')
@@ -177,48 +201,6 @@ make_custom_pr_measure <- function(recall_perc=5, name_str="pr5"){
     }
   )
   custom_measure
-}
-
-# ------------------------------------------------------------------------------
-# Plot precision recall and ROC curve
-# ------------------------------------------------------------------------------
-
-get_truth_pred <- function(pred){
-  # This helper function could not have been used in make_custom_pr_measure()
-  # because it was not in scope. 
-  positive_class <- pred$task.desc$positive
-  prob = getPredictionProbabilities(pred, cl=positive_class)
-  
-  # get truth and turn it into ones (positive) and zeros (negative)
-  truth <- getPredictionTruth(pred)
-  if (is.factor(truth)) {
-    pos_ix <- as.integer(truth) == which(levels(truth) == positive_class)
-  } else {
-    pos_ix <- truth == positive_class
-  }
-  truth <- as.integer(pos_ix)
-  results <- list("truth"=truth, "prob"=prob)
-  results
-}
-
-plot_pr_curve <- function(results, roc=TRUE){
-  # Get probabilities and truth
-  tb <- get_truth_pred(results$pred)
-  
-  # Retain only the predictions on the test set
-  df <- as.data.frame(results$pred)
-  truth <- tb$truth[df$set=="test"]
-  prob <- tb$prob[df$set=="test"]
-  
-  # Plot ROC curve first so it's the 2nd plot once this function is run
-  if (roc){
-    roc <- roc.curve(scores.class0=prob, weights.class0=truth, curve = T)
-    plot(roc)
-  }
-  
-  # Plot PR curve
-  pr <- pr.curve(scores.class0=prob, weights.class0=truth, curve = T)
-  plot(pr)
 }
 
 # ------------------------------------------------------------------------------

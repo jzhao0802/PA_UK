@@ -16,7 +16,7 @@ library(plotmo)
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = TRUE
+matching = FALSE
 
 # Define dataset and var_config paths
 if (matching){
@@ -94,6 +94,19 @@ ps <- makeParamSet(
 
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
 # tunes the classifier's decision threshold but it takes forever -> downsample.
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+# tune.threshold=T tunes the classification threshold in every single model that
+# is fitted during the grid search. This is what makes it extremely expensive.
+# As a result we'd not only have average the parameters in the outer folds but
+# also the threshold. It's much quicker and simpler to do 
+# tuneThreshold(pred = res$pred, measure = m_all[[1]]) once the models are fitted
+# and we have predictions
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ctrl <- makeTuneControlRandom(maxit=random_search_iter, tune.threshold=F)
 
 # Define performane metrics
