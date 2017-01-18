@@ -31,6 +31,15 @@ All models work with matched and unmatched data, see corresponding folders for t
 * Make the working directory the this top folder. Each script will assume you are at the top and  not in matched or unmatched. 
 * A number of packages are required to run these scripts. Please pay attention to the error messages you get, you might be missing some packages that are not listed below. Here's a non-exhaustive list:
     * mlr
+        * Some functionality in these scripts require the development version of mlr. This can easily install from github (usually, if you're not sitting behind IMS's firewall). 
+        * To do this follow the github tutorial I wrote at: \\woksfps01\RWES Central team P&BD\Predictive_Analytics\Infrastructure\Tutorials\Git\HowToGetGitToWorkAtIMS.txt
+        * Then install `devtools`, `httr` and do:
+        ```
+        library(httr)
+        library(devtools)
+        set_config(use_proxy(url="http://localhost", port=3128, username="username",password="password"))
+        devtools::install_github("mlr-org/mlr")
+        ```
     * ranger
     * glmnet
     * rpart

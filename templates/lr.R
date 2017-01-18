@@ -11,17 +11,41 @@ library(parallelMap)
 library(ggplot2)
 
 # ------------------------------------------------------------------------------
+# Define main varaibles
+# ------------------------------------------------------------------------------
+
+# Matching or no matching
+matching = TRUE
+
+# Define dataset and var_config paths
+if (matching){
+  data_file = "data/breast_cancer_matched.csv"
+}else{
+  data_file = "data/breast_cancer.csv"
+}
+var_config_file = "data/breast_cancer_var_config.csv"
+
+# Important variables that will make it to the result file
+random_seed <- 123
+recall_thrs <- 10
+
+# ------------------------------------------------------------------------------
 # Load data
 # ------------------------------------------------------------------------------
 
 # Set seed and ensure results are reproducible even with parallelization, see 
 # here: https://github.com/mlr-org/mlr/issues/938
-random_seed <- 123
 set.seed(random_seed, "L'Ecuyer")
 
 # Load breast cancer dataset and var_config
-df <- readr::read_csv("data/breast_cancer.csv")
-var_config <- readr::read_csv("data/breast_cancer_var_config.csv")
+df <- readr::read_csv(data_file)  
+var_config <- readr::read_csv(var_config_file)
+
+if (matching){
+  # Build dataframe that holds fold membership of each sample
+  ncv <- data.frame(id=1:nrow(df), outer_fold=df$outer_fold, 
+                    inner_fold=df$inner_fold)
+}
 
 # Make sure to only retain the numerical columns
 source("palab_model/palab_model.R")
@@ -55,8 +79,7 @@ lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
 outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
 
 # Define performane metrics
-recall <- 10
-pr10 <- make_custom_pr_measure(recall, "pr10")
+pr10 <- make_custom_pr_measure(recall_thrs, "pr10")
 m2 <- auc
 m3 <- setAggregation(pr10, test.sd)
 m4 <- setAggregation(auc, test.sd)
@@ -71,9 +94,13 @@ m_all <- list(pr10, m2, m3, m4)
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
-# Run nested CV
+if (matching){
+  res <- palab_resample(lrn, dataset, ncv, ps, ctrl, m_all, show_info=T)
+}else{
 res <- resample(lrn, dataset, resampling=outer, models=T, show.info=F, 
                 measures=m_all)
+}
+
 parallelStop()
 
 # ------------------------------------------------------------------------------
@@ -81,9 +108,16 @@ parallelStop()
 # ------------------------------------------------------------------------------
 
 # Get summary of results with main stats, and best parameters
-extra <- list("ElapsedTime(secs)"=res$runtime, "RandomSeed"=random_seed, 
-              "Recall"=recall)
-results <- get_non_nested_results(res, extra=extra, decimal=5)
+# Define extra parameters that we want to save in the results
+extra <- list("Matching"=as.character(matching),
+              "NumSamples"=dataset$task.desc$size, 
+              "NumFeatures"=sum(dataset$task.desc$n.feat),
+              "ElapsedTime(secs)"=res$runtime, 
+              "RandomSeed"=random_seed, 
+              "Recall"=recall_thrs)
+
+# Get summary of results with main stats, and best parameters
+results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
 
 # Get detailed results
 # results <- get_non_nested_results(res, detailed=T)

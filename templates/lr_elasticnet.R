@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#       Nested unmatched CV with elastic net penalized logistic regression
+#          Nested CV with elastic net penalized logistic regression
 #
 # ------------------------------------------------------------------------------
 
@@ -138,7 +138,8 @@ parallelStop()
 # ------------------------------------------------------------------------------
 
 # Define extra parameters that we want to save in the results
-extra <- list("NumSamples"=dataset$task.desc$size, 
+extra <- list("Matching"=as.character(matching),
+              "NumSamples"=dataset$task.desc$size, 
               "NumFeatures"=sum(dataset$task.desc$n.feat),
               "ElapsedTime(secs)"=res$runtime, 
               "RandomSeed"=random_seed, 
@@ -236,7 +237,7 @@ plotThreshVsPerf(thr_perf)
 # Columns that are not the target
 all_cols <- colnames(df)[colnames(df) != target]
 
-# Plot median of the curve of each patient for 1st outer models and average model
+# Plot median of the curve of each patient for 1st outer model and average model
 par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
                                               all_cols, fun=median)
 plotPartialDependence(par_dep_data)

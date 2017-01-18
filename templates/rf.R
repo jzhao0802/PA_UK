@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#                Nested unmatched CV with random forest
+#                      Nested CV with random forest
 #
 # ------------------------------------------------------------------------------
 
@@ -11,22 +11,47 @@ library(parallelMap)
 library(ggplot2)
 
 # ------------------------------------------------------------------------------
+# Define main varaibles
+# ------------------------------------------------------------------------------
+
+# Matching or no matching
+matching = FALSE
+
+# Define dataset and var_config paths
+if (matching){
+  data_file = "data/breast_cancer_matched.csv"
+}else{
+  data_file = "data/breast_cancer.csv"
+}
+var_config_file = "data/breast_cancer_var_config2.csv"
+
+# Important variables that will make it to the result file
+random_seed <- 123
+recall_thrs <- 10
+random_search_iter <- 50L
+
+# ------------------------------------------------------------------------------
 # Load data
 # ------------------------------------------------------------------------------
 
 # Set seed and ensure results are reproducible even with parallelization, see 
 # here: https://github.com/mlr-org/mlr/issues/938
-random_seed <- 123
 set.seed(random_seed, "L'Ecuyer")
 
 # Load breast cancer dataset and var_config
-df <- readr::read_csv("data/breast_cancer.csv")
-var_config <- readr::read_csv("data/breast_cancer_var_config2.csv")
+df <- readr::read_csv(data_file)  
+var_config <- readr::read_csv(var_config_file)
 
-# RF can handle categorical variables, so we'll keep those as well
+if (matching){
+  # Build dataframe that holds fold membership of each sample
+  ncv <- data.frame(id=1:nrow(df), outer_fold=df$outer_fold, 
+                    inner_fold=df$inner_fold)
+}
+
+# Make sure to only retain the numerical columns
 source("palab_model/palab_model.R")
 ids <- get_ids(df, var_config)
-df <- get_variables(df, var_config, categorical=T)
+df <- get_variables(df, var_config)
 
 # If missing values are present, impute them with median or method="mean"
 # df <- impute_data(df, target, method="median")
@@ -67,7 +92,7 @@ target_iw <- unlist(lapply(target_f, function(x) inverse_weights[x]))
 # Define range of mtry we will search over
 features_n <- sum(dataset$task.desc$n.feat) 
 mtry_default <- floor(sqrt(features_n))
-# +/-10% from the default value
+# +/-25% from the default value
 mtry_range <- .25
 mtry_lower <- max(1, round(mtry_default * (1 - mtry_range)))
 mtry_upper <- min(features_n, round(mtry_default * (1 + mtry_range)))
@@ -86,27 +111,28 @@ ps <- makeParamSet(
 
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
 # tunes the classifier's decision threshold but it takes forever -> downsample.
-random_search_iter <- 50L
 ctrl <- makeTuneControlRandom(maxit=random_search_iter, tune.threshold=F)
 
-# Define outer and inner resampling strategies
-outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
-
-# The inner could be "Subsample" if we don't have enough positive samples
-inner <- makeResampleDesc("CV", iters=3, stratify=T)
-
 # Define performane metrics
-recall <- 10
-pr10 <- make_custom_pr_measure(recall, "pr10")
+pr10 <- make_custom_pr_measure(recall_thrs, "pr10")
 m2 <- auc
 m3 <- setAggregation(pr10, test.sd)
 m4 <- setAggregation(auc, test.sd)
 # It's always the first in the list that's used to rank hyper-params in tuning.
 m_all <- list(pr10, m2, m3, m4)
 
-# Define wrapped learner: this is mlR's way of doing nested CV on a learner
-lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
-                            show.info=F, measures=m_all)
+
+if (!matching){
+  # Define outer and inner resampling strategies
+  outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
+  
+  # The inner could be "Subsample" if we don't have enough positive samples
+  inner <- makeResampleDesc("CV", iters=3, stratify=T)
+  
+  # Define wrapped learner: this is mlR's way of doing nested CV on a learner
+  lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
+                              show.info=F, measures=m_all)
+}
 
 # ------------------------------------------------------------------------------
 # Run training with nested CV
@@ -116,18 +142,29 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
-# Run nested CV
-res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
-                extract=getTuneResult, show.info=F, measures=m_all)
+if (matching){
+  res <- palab_resample(lrn, dataset, ncv, ps, ctrl, m_all, show_info=T)
+}else{
+  res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
+                  extract=getTuneResult, show.info=F, measures=m_all)  
+}
+
 parallelStop()
 
 # ------------------------------------------------------------------------------
 # Get results summary and all tried parameter combinations
 # ------------------------------------------------------------------------------
 
+# Define extra parameters that we want to save in the results
+extra <- list("Matching"=as.character(matching),
+              "NumSamples"=dataset$task.desc$size,
+              "NumFeatures"=sum(dataset$task.desc$n.feat),
+              "ElapsedTime(secs)"=res$runtime, 
+              "RandomSeed"=random_seed, 
+              "Recall"=recall_thrs, 
+              "IterationsPerFold"=random_search_iter)
+
 # Get summary of results with main stats, and best parameters
-extra <- list("ElapsedTime(secs)"=res$runtime, "RandomSeed"=random_seed, 
-              "Recall"=recall, "IterationsPerFold"=random_search_iter)
 results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
 
 # Get detailed results

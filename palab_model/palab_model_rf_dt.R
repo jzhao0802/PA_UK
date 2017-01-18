@@ -109,6 +109,7 @@ plot_rf_vi <- function(model, title=''){
   vi <- model$variable.importance
   vi <- vi/max(vi)
   barplot(sort(vi), horiz = T, las=2, main=title)
+  par(mfrow=c(1,1))
 }
 
 # ------------------------------------------------------------------------------
