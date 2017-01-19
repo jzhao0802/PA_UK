@@ -10,7 +10,11 @@ get_matched_cv_folds <- function(ncv, fold="inner_fold"){
   
   # Make resampling object for inner fold
   fold_n <- max(ncv[fold])
-  cv_desc <- makeResampleDesc("CV", iter=fold_n)
+  if (fold == "inner_fold"){
+    cv_desc <- makeResampleDesc("CV", iter=fold_n)  
+  }else{
+    cv_desc <- makeResampleDesc("CV", iter=fold_n, predict="both")
+  }
   cv_inst <- makeResampleInstance(cv_desc, size=nrow(ncv))
   
   # mlR uses indices and not rownames to define the CV folds. Therefore When 
@@ -50,7 +54,7 @@ measureAggrName = function(measure) {
 }
 
 makeResamplePrediction = function(instance, preds.test, preds.train) {
-  library(data.table)
+  library(dtplyr)
   tenull = sapply(preds.test, is.null)
   trnull = sapply(preds.train, is.null)
   if (any(tenull)) pr.te = preds.test[!tenull] else pr.te = preds.test
@@ -86,25 +90,15 @@ makeResamplePrediction = function(instance, preds.test, preds.train) {
 # TUNE OUTER FOLD WITH MATCHING AND PREDEFINED CV
 # ------------------------------------------------------------------------------
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-# I need to understand the role of weights better. In theory the 
-# makeWeightedClassesWrapper will add weight to a learner and then depending on
-# the underlying implementation it will either weight the observations or the
-# classes. See> https://mlr-org.github.io/mlr-tutorial/devel/html/cost_sensitive_classif/index.html
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
-tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures, weights,
+tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures, 
                             show_info=F){
   # This function is a modified replicate of mlR's doResampleIteration function
   # in the resample.R. We do this basically so we end up with the results having
   # the same classes/structure/etc so we can use everything else from the other
   # non-matchinh scripts and the rest of mlR. For implementation details check:
   # https://github.com/mlr-org/mlr/blob/master/R/resample.R
+  
+  library(stringi)
   
   # Define test and train datasets in the outer fold and print them
   test_fold_ncv <- ncv[ncv$outer_fold == i,]
@@ -121,14 +115,14 @@ tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures, weights,
   time1 <- Sys.time()
   lrn_inner <- tuneParams(learner, train_data, resampling=inner_cv, 
                           par.set=ps, control=ctrl, show.info=FALSE, 
-                          measures=measures, weights=weights[train_fold_ids])
+                          measures=measures)
   time2 <- Sys.time()
   runtime <- as.numeric(difftime(time2, time1, "sec"))
   # Make learner with best params and predict test data
   lrn_outer <- setHyperPars(learner, par.vals=lrn_inner$x)
   
   # Train on the whole outer train set
-  lrn_outer <- train(lrn_outer, train_data, weights=weights[train_fold_ids])
+  lrn_outer <- train(lrn_outer, train_data)
   
   # Define variables holding results
   err_msgs = c(NA_character_, NA_character_)
@@ -256,8 +250,8 @@ palab_resample <- function(learner, task, ncv, ps, ctrl, measures, show_info=F){
   # by the ncv dataframe - see palab_model_matching for details.
   
   # Define extra params for parallelized execution
-  args = list(ncv=ncv, learner=learner, task=task, measures=measures, 
-              weights=task$weights, ps=ps, ctrl=ctrl, show_info=show_info)
+  args = list(ncv=ncv, learner=learner, task=task, measures=measures, ps=ps, 
+              ctrl=ctrl, show_info=show_info)
   
   # Generate outer CV object with predefined indices
   outer_fold_n <- max(ncv$outer_fold)

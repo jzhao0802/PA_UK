@@ -15,7 +15,7 @@ library(ggplot2)
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = TRUE
+matching = FALSE
 
 # Define dataset and var_config paths
 if (matching){
@@ -64,7 +64,7 @@ target = "Class"
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
-dataset <- makeClassifTask(id="BreastCancer", data=df, target=target, positive=1)
+dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -80,20 +80,10 @@ lrn <- makeLearner("classif.ranger", predict.type="prob", predict.threshold=0.5)
 # Cheaper than OOB/permutation estimation of feature importance
 lrn <- setHyperPars(lrn, importance="impurity")
 
-# Make sure we sample according to inverse class frequency
-inverse_weights <- 1/get_class_freqs(dataset)
-target_vals <- getTaskTargets(dataset)
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-# Understand weights better, related to tune_outer_fold()
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-dataset$weights <- as.numeric(unlist(lapply(target_vals, 
-                                            function(x) inverse_weights[x])))
+# Make sure we sample according to inverse class frequency 
+# !!! This only works with the development branch of mlr at the moment
+pos_class_w <- get_class_freqs(dataset)["1"]
+lrn <- makeWeightedClassesWrapper(lrn, wcw.weight=pos_class_w)
 
 # Define range of mtry we will search over
 features_n <- sum(dataset$task.desc$n.feat) 
@@ -126,7 +116,6 @@ m3 <- setAggregation(pr10, test.sd)
 m4 <- setAggregation(auc, test.sd)
 # It's always the first in the list that's used to rank hyper-params in tuning.
 m_all <- list(pr10, m2, m3, m4)
-
 
 if (!matching){
   # Define outer and inner resampling strategies
@@ -249,9 +238,13 @@ theme_set(theme_minimal(base_size=10))
 
 # Define performance metrics we want to plot, ppv=precision, tpr=recall
 perf_to_plot <- list(fpr, tpr, ppv, mmce)
+
 # Generate the data for the plots
 thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
+
+# Find out at which threshold we maximise a given perf metric
+tuneThreshold(pred=res$pred, measure=pr10)
 
 # ------------------------------------------------------------------------------
 # Partial dependence plots

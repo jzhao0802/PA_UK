@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#       Nested unmatched CV with simple logistic regression
+#                   Nested CV with logistic regression
 #
 # ------------------------------------------------------------------------------
 
@@ -15,7 +15,7 @@ library(ggplot2)
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = TRUE
+matching = FALSE
 
 # Define dataset and var_config paths
 if (matching){
@@ -63,7 +63,7 @@ target = "Class"
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
-dataset <- makeClassifTask(id="BreastCancer", data=df, target=target, positive=1)
+dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -75,8 +75,16 @@ get_class_freqs(dataset)
 # Define logistic regression with elasticnet penalty
 lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
 
-# Define outer and inner resampling strategies
-outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
+# Make sure glmnet uses the class weights
+pos_class_w <- get_class_freqs(dataset)["1"]
+lrn <- makeWeightedClassesWrapper(lrn, wcw.weight=pos_class_w)
+
+# Define outer resampling strategies: if matched, use ncv
+if (matching){
+  outer <- get_matched_cv_folds(ncv, "outer_fold")
+}else{
+  outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
+}
 
 # Define performane metrics
 pr10 <- make_custom_pr_measure(recall_thrs, "pr10")
@@ -94,12 +102,8 @@ m_all <- list(pr10, m2, m3, m4)
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
-if (matching){
-  res <- palab_resample(lrn, dataset, ncv, ps, ctrl, m_all, show_info=T)
-}else{
 res <- resample(lrn, dataset, resampling=outer, models=T, show.info=F, 
                 measures=m_all)
-}
 
 parallelStop()
 
@@ -117,7 +121,7 @@ extra <- list("Matching"=as.character(matching),
               "Recall"=recall_thrs)
 
 # Get summary of results with main stats, and best parameters
-results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
+results <- get_non_nested_results(res, extra=extra, decimal=5)
 
 # Get detailed results
 # results <- get_non_nested_results(res, detailed=T)
@@ -191,9 +195,13 @@ theme_set(theme_minimal(base_size=10))
 
 # Define performance metrics we want to plot, ppv=precision, tpr=recall
 perf_to_plot <- list(fpr, tpr, ppv, mmce)
+
 # Generate the data for the plots
 thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
+
+# Find out at which threshold we maximise a given perf metric
+tuneThreshold(pred=res$pred, measure=pr10)
 
 # ------------------------------------------------------------------------------
 # Partial dependence plots

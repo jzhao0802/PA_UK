@@ -65,7 +65,7 @@ target = "Class"
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
-dataset <- makeClassifTask(id="BreastCancer", data=df, target=target, positive=1)
+dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -93,20 +93,7 @@ ps <- makeParamSet(
 # lrn <- setHyperPars(lrn, alpha=1)
 
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
-# tunes the classifier's decision threshold but it takes forever -> downsample.
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-# tune.threshold=T tunes the classification threshold in every single model that
-# is fitted during the grid search. This is what makes it extremely expensive.
-# As a result we'd not only have average the parameters in the outer folds but
-# also the threshold. It's much quicker and simpler to do 
-# tuneThreshold(pred = res$pred, measure = m_all[[1]]) once the models are fitted
-# and we have predictions
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# tunes the classifier's decision threshold in inner folds but it takes forever
 ctrl <- makeTuneControlRandom(maxit=random_search_iter, tune.threshold=F)
 
 # Define performane metrics
@@ -239,9 +226,13 @@ theme_set(theme_minimal(base_size=10))
 
 # Define performance metrics we want to plot, ppv=precision, tpr=recall
 perf_to_plot <- list(fpr, tpr, ppv, mmce)
+
 # Generate the data for the plots, do aggregate=T if you want the mean
 thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
+
+# Find out at which threshold we maximise a given perf metric
+tuneThreshold(pred=res$pred, measure=pr10)
 
 # ------------------------------------------------------------------------------
 # Partial dependence plots

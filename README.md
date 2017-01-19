@@ -50,7 +50,7 @@ All models work with matched and unmatched data, see corresponding folders for t
     * rattle
     * gridExtra
     * plotmo
-    * readr, dplyr, tidyr
+    * readr, dtplyr, tidyr, stringi 
     * parallel
     * parallelMap
     * ggplot2
