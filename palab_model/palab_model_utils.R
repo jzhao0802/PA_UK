@@ -130,7 +130,6 @@ toc <- function(){
 make_custom_pr_measure <- function(recall_perc=5, name_str="pr5"){
   
   find_prec_at_recall <- function(pred, recall_perc=5){
-    library(PRROC)
     # This function takes in a prediction output from a trained mlR learner. It
     # extracts the predicitons, and finds the highest precision at a given
     # percentage of recall. 

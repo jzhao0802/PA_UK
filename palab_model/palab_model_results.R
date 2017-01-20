@@ -60,9 +60,9 @@ get_results <- function(results, grid_ps, detailed=F, all_measures=F,
   to_write <- c(to_write, list("best_params"=params_w))
   
   # Extract results from nested CV results
-  o_train <- results$measures.test
+  o_train <- results$measures.train
   o_train$iter <- NULL
-  o_test <- results$measures.train
+  o_test <- results$measures.test
   o_test$iter <- NULL
   i_test <- as.data.frame(t(extractSubList(results$extract, "y")))
   
@@ -156,15 +156,10 @@ get_non_nested_results <- function(results, all_measures=F, write_csv=F,
   to_write <- list("info"= info_df$to_write)
   
   # Extract results from nested CV results
-  o_train <- results$measures.test
+  o_train <- results$measures.train
   o_train$iter <- NULL
-  o_test <- results$measures.train
+  o_test <- results$measures.test
   o_test$iter <- NULL
-  
-  # Discard columns with aggregated SD values in the outer loop
-  no_sd_ix <- !grepl("sd", colnames(o_train))
-  o_train <- o_train[,no_sd_ix]
-  o_test <- o_test[,no_sd_ix]
   
   # Add table name
   outer_fold_n <- length(results$models)

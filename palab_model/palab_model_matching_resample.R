@@ -86,6 +86,11 @@ makeResamplePrediction = function(instance, preds.test, preds.train) {
   )
 }
 
+exportMlrOptions = function(level) {
+  .mlr.slave.options = getMlrOptions()
+  parallelExport(".mlr.slave.options", level=level, master=F, show.info=F)
+}
+
 # ------------------------------------------------------------------------------
 # TUNE OUTER FOLD WITH MATCHING AND PREDEFINED CV
 # ------------------------------------------------------------------------------
@@ -117,7 +122,7 @@ tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures,
                           par.set=ps, control=ctrl, show.info=FALSE, 
                           measures=measures)
   time2 <- Sys.time()
-  runtime <- as.numeric(difftime(time2, time1, "sec"))
+  runtime <- as.numeric(difftime(time2, time1, units="mins"))
   # Make learner with best params and predict test data
   lrn_outer <- setHyperPars(learner, par.vals=lrn_inner$x)
   
@@ -258,11 +263,13 @@ palab_resample <- function(learner, task, ncv, ps, ctrl, measures, show_info=F){
   outer_cv <- get_matched_cv_folds(ncv, "outer_fold")
   
   # Start measuring time, and do outer loop of nested CV in parallel
+  parallelLibrary("mlr", master=F, level="mlr.resample", show.info=F)
+  exportMlrOptions(level = "mlr.resample")
   time1 = Sys.time()
   results = parallelMap(tune_outer_fold, seq_len(outer_fold_n), 
                         level="mlr.resample", more.args=args)
   time2 = Sys.time()
-  runtime = as.numeric(difftime(time2, time1, "sec"))
+  runtime = as.numeric(difftime(time2, time1, units="mins"))
   
   # Merge results into mlR's ResampleResult data structure
   merged_results <- merge_outer_models(learner, task, results, measures, 

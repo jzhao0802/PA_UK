@@ -75,9 +75,9 @@ get_class_freqs(dataset)
 # Define logistic regression with elasticnet penalty
 lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
 
-# Make sure glmnet uses the class weights
-pos_class_w <- get_class_freqs(dataset)["1"]
-lrn <- makeWeightedClassesWrapper(lrn, wcw.weight=pos_class_w)
+# Do we want glmnet to uses the class weights?
+# pos_class_w <- get_class_freqs(dataset)["1"]
+# lrn <- makeWeightedClassesWrapper(lrn, wcw.weight=pos_class_w)
 
 # Define outer resampling strategies: if matched, use ncv
 if (matching){
@@ -88,11 +88,8 @@ if (matching){
 
 # Define performane metrics
 pr10 <- make_custom_pr_measure(recall_thrs, "pr10")
-m2 <- auc
-m3 <- setAggregation(pr10, test.sd)
-m4 <- setAggregation(auc, test.sd)
 # It's always the first in the list that's used to rank hyper-params in tuning.
-m_all <- list(pr10, m2, m3, m4)
+m_all <- list(pr10, auc)
 
 # ------------------------------------------------------------------------------
 # Run training with nested CV
@@ -124,13 +121,15 @@ extra <- list("Matching"=as.character(matching),
 results <- get_non_nested_results(res, extra=extra, decimal=5)
 
 # Get detailed results
-# results <- get_non_nested_results(res, detailed=T)
+# results <- get_non_nested_results(res, extra=extra, detailed=T)
 
 # Get detailed results with the actual tables
-# results <- get_non_nested_results(res, detailed=T, all_measures=T)
+# results <- get_non_nested_results(res, extra=extra, detailed=T, 
+#                                   all_measures=T)
 
 # Save all these results into a csv
-# results <- get_non_nested_results(res, detailed=T, all_measures=T, write_csv=T)
+# results <- get_non_nested_results(res, extra=extra, detailed=T, 
+#                                   all_measures=T, write_csv=T)
 
 # ------------------------------------------------------------------------------
 # Get predictions
