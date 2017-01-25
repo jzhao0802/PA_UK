@@ -269,7 +269,7 @@ palab_resample <- function(learner, task, ncv, ps, ctrl, measures, show_info=F){
   results = parallelMap(tune_outer_fold, seq_len(outer_fold_n), 
                         level="mlr.resample", more.args=args)
   time2 = Sys.time()
-  runtime = as.numeric(difftime(time2, time1, units="mins"))
+  runtime = as.numeric(difftime(time2, time1, units="secs"))
   
   # Merge results into mlR's ResampleResult data structure
   merged_results <- merge_outer_models(learner, task, results, measures, 

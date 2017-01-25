@@ -82,8 +82,9 @@ lrn <- setHyperPars(lrn, importance="impurity")
 
 # Make sure we sample according to inverse class frequency 
 # !!! This only works with the development branch of mlr at the moment
-pos_class_w <- get_class_freqs(dataset)["1"]
-lrn <- makeWeightedClassesWrapper(lrn, wcw.weight=pos_class_w)
+pos_class_w <- get_class_freqs(dataset)
+iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
+dataset$weights <- iw
 
 # Define range of mtry we will search over
 features_n <- sum(dataset$task.desc$n.feat) 
@@ -98,7 +99,7 @@ ps <- makeParamSet(
   makeNumericParam("num.trees", lower=100L, upper=2000L, trafo=round),
   makeNumericParam("mtry", lower=mtry_lower, upper=mtry_upper, trafo=round),
   # this depends on the dataset and the size of the positive class
-  makeNumericParam("min.node.size", lower=10, upper=100, trafo=round)
+  makeNumericParam("min.node.size", lower=100, upper=300, trafo=round)
 )
 
 # ------------------------------------------------------------------------------
