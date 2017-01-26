@@ -20,11 +20,9 @@ All models work with matched and unmatched data, see corresponding folders for t
 
 * __data__: A few example scripts how to clean, impute, preprocess datasets. The resulting datasets of these scripts are used by the template scripts.
 * __dev__: Uncategorised, development scripts, probably not very important unless you want to add functionality to palab_model.
-* __matched__: Template scripts with matching.
+* __templates__: Template scripts with for all available models.
 * __notebooks__: Please read these before asking for help. It's highly likely that you'll find your answer here, or at least learn a great deal about mlR and palab_model.
-* __output__: Folder for some output plots and text files, not very interesting.
 * __palab_model:__ Holds the helper functions that make the actual analysis templates in the matched and unmatched folders neater and cleaner. mlR uses camelCase names for functions, I used pythonic_names, so it's easy to see if a function of interest is part of PAlab or mlR.
-* __unmatched__: Template scripts without matching.
 
 
 ## How to use this?
