@@ -150,13 +150,15 @@ extra <- list("Matching"=as.character(matching),
 results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
 
 # Get detailed results
-# results <- get_results(res, detailed=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T)
 
 # Get detailed results with the actual tables
-# results <- get_results(res, detailed=T, all_measures=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
+#                        all_measures=T)
 
 # Save all these results into a csv
-# results <- get_results(res, detailed=T, all_measures=T, write_csv=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
+#                        all_measures=T, write_csv=T)
 
 # For each outer fold show all parameter combinations with their perf metric
 opt_paths <- get_opt_paths(res)
@@ -270,8 +272,5 @@ plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 # Generate hyper parameter plots for every pair of hyper parameters
 # ------------------------------------------------------------------------------
 
-# Plot a performance metric for each pair of hyper parameter, generates .pdf
-plot_hyperpar_pairs(res, "auc.test.mean", output_folder="elasticnet")
-
-# If we used a trafo function in the grid add trafo=T
-# plot_hyperpar_pairs(res, "auc.test.mean", trafo=T)
+# Plot a performance metric for two hyper parameters, generates .pdf
+plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder="elasticnet_hypers")

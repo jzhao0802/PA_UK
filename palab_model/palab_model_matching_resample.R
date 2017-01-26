@@ -54,7 +54,7 @@ measureAggrName = function(measure) {
 }
 
 makeResamplePrediction = function(instance, preds.test, preds.train) {
-  library(dtplyr)
+  library(data.table)
   tenull = sapply(preds.test, is.null)
   trnull = sapply(preds.train, is.null)
   if (any(tenull)) pr.te = preds.test[!tenull] else pr.te = preds.test
@@ -263,8 +263,8 @@ palab_resample <- function(learner, task, ncv, ps, ctrl, measures, show_info=F){
   outer_cv <- get_matched_cv_folds(ncv, "outer_fold")
   
   # Start measuring time, and do outer loop of nested CV in parallel
-  parallelLibrary("mlr", master=F, level="mlr.resample", show.info=F)
-  exportMlrOptions(level = "mlr.resample")
+  #parallelLibrary("mlr", master=F, level="mlr.resample", show.info=F)
+  #exportMlrOptions(level = "mlr.resample")
   time1 = Sys.time()
   results = parallelMap(tune_outer_fold, seq_len(outer_fold_n), 
                         level="mlr.resample", more.args=args)

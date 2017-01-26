@@ -84,7 +84,7 @@ lrn <- setHyperPars(lrn, importance="impurity")
 # !!! This only works with the development branch of mlr at the moment
 pos_class_w <- get_class_freqs(dataset)
 iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-dataset$weights <- iw
+dataset$weights <- as.numeric(iw)
 
 # Define range of mtry we will search over
 features_n <- sum(dataset$task.desc$n.feat) 
@@ -164,13 +164,15 @@ extra <- list("Matching"=as.character(matching),
 results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
 
 # Get detailed results
-# results <- get_results(res, detailed=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T)
 
 # Get detailed results with the actual tables
-# results <- get_results(res, detailed=T, all_measures=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
+#                        all_measures=T)
 
 # Save all these results into a csv
-# results <- get_results(res, detailed=T, all_measures=T, write_csv=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
+#                        all_measures=T, write_csv=T)
 
 # For each outer fold show all parameter combinations with their perf metric
 opt_paths <- get_opt_paths(res)
@@ -279,4 +281,7 @@ plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 # ------------------------------------------------------------------------------
 
 # Plot a performance metric for each pair of hyper parameter, generates .pdf
-plot_hyperpar_pairs(res, "auc.test.mean", trafo=T, output_folder="rf_hypers")
+# Visualising more than 2 hyper-params requires partial dependence plots which
+# is slow to calculate. It's quicker if not to plot per each fold: per_fold=F.
+plot_hyperpar_pairs(res, ps, "pr10.test.mean", per_fold=F,
+                    output_folder="rf_hypers")
