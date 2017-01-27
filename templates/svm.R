@@ -15,7 +15,7 @@ library(ggplot2)
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = TRUE
+matching = FALSE
 
 # Define dataset and var_config paths
 if (matching){

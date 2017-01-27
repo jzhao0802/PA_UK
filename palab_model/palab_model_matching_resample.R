@@ -167,11 +167,6 @@ tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures,
     messagef(perfsToString(x))
   }
   
-  # Turned out extract=lrn_inner is enough below, but this is good to know
-  # wrapped_m <- makeWrappedModel(learner, lrn_outer, task$task.desc, 
-  #                              train_fold_ids, getTaskFeatureNames(task),
-  #                              getTaskFactorLevels(task), runtime)
-  
   # Compile results
   list(
     measures_test = ms_test,
@@ -262,9 +257,11 @@ palab_resample <- function(learner, task, ncv, ps, ctrl, measures, show_info=F){
   outer_fold_n <- max(ncv$outer_fold)
   outer_cv <- get_matched_cv_folds(ncv, "outer_fold")
   
+  # TODO: palab_resample with mlr.resample parallel option breaks the code
+  # parallelLibrary("mlr", master=F, level="mlr.resample", show.info=F)
+  # exportMlrOptions(level = "mlr.resample")
+  
   # Start measuring time, and do outer loop of nested CV in parallel
-  #parallelLibrary("mlr", master=F, level="mlr.resample", show.info=F)
-  #exportMlrOptions(level = "mlr.resample")
   time1 = Sys.time()
   results = parallelMap(tune_outer_fold, seq_len(outer_fold_n), 
                         level="mlr.resample", more.args=args)

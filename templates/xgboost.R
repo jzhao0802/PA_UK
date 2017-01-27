@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#                      Nested CV with random forest
+#                           Nested CV with SVM
 #
 # ------------------------------------------------------------------------------
 
@@ -8,6 +8,7 @@ library(mlr)
 library(readr)
 library(parallel)
 library(parallelMap)
+library(ParamHelpers)
 library(ggplot2)
 
 # ------------------------------------------------------------------------------
@@ -23,7 +24,7 @@ if (matching){
 }else{
   data_file = "data/breast_cancer.csv"
 }
-var_config_file = "data/breast_cancer_var_config2.csv"
+var_config_file = "data/breast_cancer_var_config.csv"
 
 # Important variables that will make it to the result file
 random_seed <- 123
@@ -60,7 +61,7 @@ df <- get_variables(df, var_config)
 target = "Class"
 
 # ------------------------------------------------------------------------------
-# Setup dataset and randomForest in mlR
+# Setup modelling in mlR
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
@@ -74,40 +75,31 @@ dataset
 get_class_freqs(dataset)
 
 # Make sure we sample according to inverse class frequency 
-# !!! This only works with the development branch of mlr at the moment
 pos_class_w <- get_class_freqs(dataset)
 iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
 dataset$weights <- as.numeric(iw)
 
-# Define random Forest, we use the fastes available implementation see:
-# https://arxiv.org/pdf/1508.04409.pdf
-lrn <- makeLearner("classif.ranger", predict.type="prob", predict.threshold=0.5)
-
-# Cheaper than OOB/permutation estimation of feature importance
-lrn <- setHyperPars(lrn, importance="impurity")
-
-# Define range of mtry we will search over
-features_n <- sum(dataset$task.desc$n.feat) 
-mtry_default <- round(sqrt(features_n))
-# +/-25% from the default value
-mtry_range <- .25
-mtry_lower <- max(1, round(mtry_default * (1 - mtry_range)))
-mtry_upper <- min(features_n, round(mtry_default * (1 + mtry_range)))
-
-# A lot of good advice from here: https://goo.gl/avkcBV
-ps <- makeParamSet(
-  makeIntegerParam("num.trees", lower=100L, upper=2000L),
-  makeIntegerParam("mtry", lower=mtry_lower, upper=mtry_upper),
-  # this depends on the dataset and the size of the positive class
-  makeIntegerParam("min.node.size", lower=100, upper=300)
+# Define SVM with RBF kernel. 
+lrn <- makeLearner("classif.xgboost", predict.type="prob", 
+                   predict.threshold=0.5)
+lrn$par.vals = list(
+  nrounds = 100,
+  verbose = F,
+  objective = "binary:logistic"
+  # for multiclass use objective = "multi:softmax"
 )
 
-# ------------------------------------------------------------------------------
-# Setup rest of the nested CV in mlR
-# ------------------------------------------------------------------------------
+# Define hyper parameters
+ps = makeParamSet(
+  makeNumericParam("eta", lower=0.01, upper=0.3),
+  makeIntegerParam("max_depth", lower=2, upper=6),
+  makeIntegerParam("min_child_weight", lower=1, upper=5),
+  makeNumericParam("colsample_bytree", lower=.5, upper=1),
+  makeNumericParam("subsample", lower=.5, upper=1)
+)
 
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
-# tunes the classifier's decision threshold but it takes forever -> downsample.
+# tunes the classifier's decision threshold in inner folds but it takes forever
 ctrl <- makeTuneControlRandom(maxit=random_search_iter, tune.threshold=F)
 
 # Define performane metrics
@@ -217,7 +209,7 @@ predict(res$models[[1]], dataset)
 # Fit model on all data with average of best params
 # ------------------------------------------------------------------------------
 
-best_mean_params <- get_best_mean_param(results, int=T)
+best_mean_params <- get_best_mean_param(results)
 lrn_outer <- setHyperPars(lrn, par.vals=best_mean_params)
 
 # Train on the whole dataset and extract model
@@ -283,5 +275,7 @@ plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 # Plot a performance metric for each pair of hyper parameter, generates .pdf
 # Visualising more than 2 hyper-params requires partial dependence plots which
 # is slow to calculate. It's quicker if not to plot per each fold: per_fold=F.
+# Also if we have more than 2 params, indiv_pars=T will plot each as a line plot
+# which is a lot qucker.
 plot_hyperpar_pairs(res, ps, "pr10.test.mean", per_fold=F,
-                    output_folder="rf_hypers")
+                    output_folder="xgboost_hypers", indiv_pars=T)

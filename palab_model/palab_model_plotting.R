@@ -56,19 +56,8 @@ plot_pr_curve <- function(results, roc=TRUE){
 # Plot each hyper-parameter pair and the interpolated performance metric
 # ------------------------------------------------------------------------------
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-# Now that I've started to use the development version, I need to update this 
-# function so it uses partial.dep if we have more than 3 params. Also the 
-# experiments are not showing which is a bummer..
-
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
 plot_hyperpar_pairs <- function(results, ps, perf_metric, per_fold=T, 
-                                output_folder=""){
+                                output_folder="", indiv_pars=F){
   # Plots the performance metric surface for all hyper parameter combinations 
   # across all outer folds
   library(gridExtra)
@@ -88,9 +77,6 @@ plot_hyperpar_pairs <- function(results, ps, perf_metric, per_fold=T,
     resdata <- generateHyperParsEffectData(results, trafo=trafo)
   }
   
-  # Generate hyper param pairs to plot
-  all_axes <- t(combn(resdata$hyperparams, 2))
-  
   # Check output folder, create it if needed
   create_output_folder(output_folder)
   
@@ -100,26 +86,32 @@ plot_hyperpar_pairs <- function(results, ps, perf_metric, per_fold=T,
   # Short metric name
   legend_title <- unlist(strsplit(perf_metric, split="\\."))[1]
   
-  # Go through all variable pairs  
-  for (p in 1:nrow(all_axes)){
+  # Go through all variable pairs or individual params, define axes for plots
+  if(indiv_pars){
+    all_axes <- resdata$hyperparams
+    plot_n <- length(all_axes)
+  }else{
+    # Generate hyper param pairs to plot
+    all_axes <- t(combn(resdata$hyperparams, 2))
+    plot_n <- nrow(all_axes)
+  }
+  
+  for (p in 1:plot_n){
     # Go through each outer fold + a combined plot
     subplots <- list()
-    # Get axes of the plot
-    axes <- all_axes[p, ]
+    
+    # Get axes of the multiplot
+    if(!indiv_pars) axes <- all_axes[p, ] 
     
     for (i in 1:subplot_n){
       # df stores the relevant data of each outer fold
       df <- resdata
-      # Discard hyperparams that we are not plotting, otherwise we get a nasty
-      # bug that took me 3 hours to debug
-      # df$hyperparams <- axes[1:2]
       if (i==1){
         subtitle = paste("All outer folds combined")
       }else{
         subtitle = paste("Outer fold", as.character(i-1))
-        # Faceting with nested_cv_run is not implemented yet, we do it manually
+        # Faceting with nested_cv_run is not implemented yet, do it manually
         df$data <- df$data[df$data$nested_cv_run==i-1,]
-        
       }
       
       # Calculate min and max colors for the gradient
@@ -128,14 +120,23 @@ plot_hyperpar_pairs <- function(results, ps, perf_metric, per_fold=T,
       med_plt <- mean(c(min_plt, max_plt))
       
       # Round long deciamls in legend text
-      scaleFUN <- function(x) sprintf("%.2f", x)
+      format_legend <- function(x) sprintf("%.2f", x)
       
-      # Create plots
+      # Create plots with partial dependence
       if (num_of_params > 2){
-        plt <- plotHyperParsEffect(df, x=axes[1], y =axes[2], z=perf_metric,
-                                   plot.type="heatmap", show.experiments=T,
-                                   partial.dep.learn="regr.earth", 
-                                   nested.agg=median)
+        if(indiv_pars){
+          # Lot more than 2 params, plot them individually - fast
+          plt <- plotHyperParsEffect(df, x=all_axes[p], y=perf_metric,
+                                     plot.type="line", show.experiments=T,
+                                     partial.dep.learn="regr.randomForest") +
+                 ggtitle(subtitle)
+        }else{
+          # More than 2 params, plot them in pairs as partial dependece heatmaps
+          plt <- plotHyperParsEffect(df, x=axes[1], y =axes[2], z=perf_metric,
+                                     plot.type="heatmap", show.experiments=T,
+                                     partial.dep.learn="regr.randomForest")  
+        }
+      # WE only have 2 params, no par.dep, plot them as interpolated heatmap
       }else{
         plt <- plotHyperParsEffect(df, x=axes[1], y =axes[2], z=perf_metric,
                                    plot.type="heatmap", interpolate="regr.earth", 
@@ -143,16 +144,17 @@ plot_hyperpar_pairs <- function(results, ps, perf_metric, per_fold=T,
       }
       
       # Make them pretty
-      plt <- plt +
+      if(!indiv_pars){
+        plt <- plt +
               scale_fill_gradient2(breaks=seq(min_plt, max_plt, length.out=5),
                                    low="grey", high="blue", midpoint=med_plt,
                                    guide=guide_legend(title=legend_title),
-                                   labels=scaleFUN) +
+                                   labels=format_legend) +
               ggtitle(subtitle) +
               theme(panel.grid.major = element_blank(), 
                     panel.grid.minor = element_blank(),
                     axis.line = element_line(colour = "grey"))
-      
+      }
       
       # Add the sublots to build multiplot
       subplots[[length(subplots)+1]] <- plt
@@ -162,16 +164,21 @@ plot_hyperpar_pairs <- function(results, ps, perf_metric, per_fold=T,
         break
       }
     }
-    # Save each multiplot of hyper param pair into the output folder
-    main_title <- paste(axes[1],"vs", axes[2])
-    file_name <- paste(paste(axes[1], axes[2], sep='_'), ".pdf", sep='')
+    # Save each (multi) plot of hyper param (pairs) into the output folder
+    if(indiv_pars){
+      main_title <- paste(all_axes[p])
+      file_name <- paste(main_title, ".pdf", sep='')
+    }
+    else{
+      main_title <- paste(axes[1],"vs", axes[2])
+      file_name <- paste(paste(axes[1], axes[2], sep='_'), ".pdf", sep='')
+    }
     output_path <- file.path(output_folder, file_name)
     if (per_fold){
       multiplot <- marrangeGrob(subplots, nrow=2, ncol=2, top=main_title)  
     }else{
       multiplot <- marrangeGrob(subplots, nrow=1, ncol=1, top=main_title)
     }
-    
     ggsave(output_path, multiplot,  width = 16, height = 9, dpi = 120)
   }
 }
