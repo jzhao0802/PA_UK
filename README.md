@@ -13,7 +13,8 @@ All models work with matched and unmatched data, see corresponding folders for t
     * Logistic regression with elastic net and lasso
     * Decision trees
     * Random forest
-    * SVM with radial kernel - in dev
+    * SVM with radial and polynomial kernel
+    * XGboost
 
 
 ## Module structure
@@ -38,7 +39,18 @@ All models work with matched and unmatched data, see corresponding folders for t
         set_config(use_proxy(url="http://localhost", port=3128, username="username",password="password"))
         devtools::install_github("mlr-org/mlr")
         ```
+    * ParamHelpers - dev version
+        * Just like above:
+        ```
+        library(httr)
+        library(devtools)
+        set_config(use_proxy(url="http://localhost", port=3128, username="username",password="password"))
+        devtools::install_github("berndbischl/ParamHelpers")
+        ```
     * ranger
+    * randomForest
+    * kernlab
+    * xgboost
     * glmnet
     * rpart
     * rpart.plot

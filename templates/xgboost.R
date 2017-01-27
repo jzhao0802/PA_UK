@@ -193,14 +193,12 @@ plot_pr_curve(res, roc=T)
 # Get tuned models for each outer fold
 o_models <- get_models(res)
 
-# Get percentage VI table with direction of association as correlation
-get_vi_table(o_models[[1]], dataset)
+# Columns that are not the target
+all_cols <- colnames(df)[colnames(df) != target]
 
-# Plot variable importance across outer fold moldes, for mean do aggregate=T
-plot_all_rf_vi(res, aggregate=F)
-
-# Alternatively here's a simpler plot
-plot_all_rf_vi_simple(res)
+# Get VI - TODO: needs improvement and stacked bar charts
+vis <- xgboost::xgb.importance(feature_names = all_cols, model=o_models[[1]])
+xgboost::xgb.plot.importance(vis)
 
 # This is how to predict with the first model
 predict(res$models[[1]], dataset)
@@ -218,9 +216,6 @@ lrn_outer_model <-getLearnerModel(lrn_outer_trained, more.unwrap=T)
 
 # Plot regularisation path of the averaged model.
 plot_rf_vi(lrn_outer_model, title="Average model")
-
-# Get percentage VI table with direction of association as correlation
-get_vi_table(lrn_outer_model, dataset)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance
@@ -244,9 +239,6 @@ tuneThreshold(pred=res$pred, measure=pr10)
 # ------------------------------------------------------------------------------
 # Partial dependence plots
 # ------------------------------------------------------------------------------
-
-# Columns that are not the target
-all_cols <- colnames(df)[colnames(df) != target]
 
 # Plot the median of the curve of each patient
 par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
