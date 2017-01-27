@@ -271,7 +271,7 @@ plotPartialDependence(par_dep_data)
 # Fit linear model to each plot and return the beta, i.e. slope
 get_par_dep_plot_slopes(par_dep_data, decimal=5)
 
-# Plot them to easily see the influence of each variable
+# Plot them to easily see the influence of each variable, p-vals are on the bars
 plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 
 # ------------------------------------------------------------------------------

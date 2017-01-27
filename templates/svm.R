@@ -15,7 +15,7 @@ library(ggplot2)
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = FALSE
+matching = TRUE
 
 # Define dataset and var_config paths
 if (matching){
@@ -188,6 +188,16 @@ plot_pr_curve(res, roc=T)
 # Get tuned models for each outer fold
 o_models <- get_models(res)
 
+# Get support vectors, note the @ notation, this is because ksvm uses S4 objects
+o_models[[1]]@alpha
+
+# Get index of resulting support vectors
+o_models[[1]]@alphaindex
+
+# Get coefficients, note: unless we use linear kernel these aren't really usful,
+# and cannot be interpretted in a straighforward way.
+o_models[[1]]@coef
+
 # This is how to predict with the first model
 predict(res$models[[1]], dataset)
 
@@ -201,12 +211,6 @@ lrn_outer <- setHyperPars(lrn, par.vals=best_mean_params)
 # Train on the whole dataset and extract model
 lrn_outer_trained <- train(lrn_outer, dataset)
 lrn_outer_model <-getLearnerModel(lrn_outer_trained, more.unwrap=T)
-
-# Plot regularisation path of the averaged model.
-plotmo::plot_glmnet(lrn_outer_model, s=best_mean_params$s, main="Average model")
-
-# Accessing params just like above, note that the mean s is over-regularising
-coef(lrn_outer_model, s=best_mean_params$s)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance
@@ -239,11 +243,6 @@ par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
                                               all_cols, fun=median)
 plotPartialDependence(par_dep_data)
 
-# Note only 3 predictors remain which are completely linear and not as above
-par_dep_data2 <- generatePartialDependenceData(lrn_outer_trained, dataset,
-                                              all_cols, fun=median)
-plotPartialDependence(par_dep_data2)
-
 # Plot partial dependence plot for all patients
 # par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
 #                                                 all_cols, individual=T)
@@ -256,7 +255,7 @@ plotPartialDependence(par_dep_data2)
 # Fit linear model to each plot and return the beta, i.e. slope
 get_par_dep_plot_slopes(par_dep_data, decimal=5)
 
-# Plot them to easily see the influence of each variable
+# Plot them to easily see the influence of each variable, p-vals are on the bars
 plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 
 # ------------------------------------------------------------------------------
@@ -264,4 +263,4 @@ plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 # ------------------------------------------------------------------------------
 
 # Plot a performance metric for two hyper parameters, generates .pdf
-plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder="elasticnet_hypers")
+plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder="svm_hypers")

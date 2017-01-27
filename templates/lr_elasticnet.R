@@ -74,6 +74,11 @@ dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
 dataset
 get_class_freqs(dataset)
 
+# Make sure we sample according to inverse class frequency 
+pos_class_w <- get_class_freqs(dataset)
+iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
+dataset$weights <- as.numeric(iw)
+
 # Define logistic regression with elasticnet penalty
 lrn <- makeLearner("classif.glmnet", predict.type="prob", predict.threshold=0.5)
 
@@ -265,7 +270,7 @@ plotPartialDependence(par_dep_data2)
 # Fit linear model to each plot and return the beta, i.e. slope
 get_par_dep_plot_slopes(par_dep_data, decimal=5)
 
-# Plot them to easily see the influence of each variable
+# Plot them to easily see the influence of each variable, p-vals are on the bars
 plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 
 # ------------------------------------------------------------------------------

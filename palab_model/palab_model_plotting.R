@@ -134,7 +134,8 @@ plot_hyperpar_pairs <- function(results, ps, perf_metric, per_fold=T,
       if (num_of_params > 2){
         plt <- plotHyperParsEffect(df, x=axes[1], y =axes[2], z=perf_metric,
                                    plot.type="heatmap", show.experiments=T,
-                                   partial.dep.learn="regr.earth")
+                                   partial.dep.learn="regr.earth", 
+                                   nested.agg=median)
       }else{
         plt <- plotHyperParsEffect(df, x=axes[1], y =axes[2], z=perf_metric,
                                    plot.type="heatmap", interpolate="regr.earth", 

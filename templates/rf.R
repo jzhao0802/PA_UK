@@ -73,18 +73,18 @@ dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
 dataset
 get_class_freqs(dataset)
 
+# Make sure we sample according to inverse class frequency 
+# !!! This only works with the development branch of mlr at the moment
+pos_class_w <- get_class_freqs(dataset)
+iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
+dataset$weights <- as.numeric(iw)
+
 # Define random Forest, we use the fastes available implementation see:
 # https://arxiv.org/pdf/1508.04409.pdf
 lrn <- makeLearner("classif.ranger", predict.type="prob", predict.threshold=0.5)
 
 # Cheaper than OOB/permutation estimation of feature importance
 lrn <- setHyperPars(lrn, importance="impurity")
-
-# Make sure we sample according to inverse class frequency 
-# !!! This only works with the development branch of mlr at the moment
-pos_class_w <- get_class_freqs(dataset)
-iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-dataset$weights <- as.numeric(iw)
 
 # Define range of mtry we will search over
 features_n <- sum(dataset$task.desc$n.feat) 
@@ -273,7 +273,7 @@ plotPartialDependence(par_dep_data)
 # Fit linear model to each plot and return the beta, i.e. slope
 get_par_dep_plot_slopes(par_dep_data, decimal=5)
 
-# Plot them to easily see the influence of each variable
+# Plot them to easily see the influence of each variable, p-vals are on the bars
 plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 
 # ------------------------------------------------------------------------------
