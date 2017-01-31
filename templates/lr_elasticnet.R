@@ -66,6 +66,7 @@ target = "Class"
 
 # Setup the classification task in mlR, explicitely define positive class
 dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
+dataset <- hclust_downsampling(dataset)
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)

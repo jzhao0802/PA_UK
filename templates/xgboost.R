@@ -79,7 +79,7 @@ pos_class_w <- get_class_freqs(dataset)
 iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
 dataset$weights <- as.numeric(iw)
 
-# Define SVM with RBF kernel. 
+# Define XGboost learner
 lrn <- makeLearner("classif.xgboost", predict.type="prob", 
                    predict.threshold=0.5)
 lrn$par.vals = list(

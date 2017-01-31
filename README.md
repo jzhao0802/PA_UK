@@ -36,7 +36,10 @@ All models work with matched and unmatched data, see corresponding folders for t
         ```
         library(httr)
         library(devtools)
+        # on your laptop after you've setup Cntlm
         set_config(use_proxy(url="http://localhost", port=3128, username="username",password="password"))
+        # on server100 or server101 
+        set_config(use_proxy(url="frboucpxy01.internal.imsglobal.com", port=8080, username="username",password="password"))
         devtools::install_github("mlr-org/mlr")
         ```
     * ParamHelpers - dev version
@@ -44,7 +47,10 @@ All models work with matched and unmatched data, see corresponding folders for t
         ```
         library(httr)
         library(devtools)
+        # on your laptop after you've setup Cntlm
         set_config(use_proxy(url="http://localhost", port=3128, username="username",password="password"))
+        # on server100 or server101 
+        set_config(use_proxy(url="frboucpxy01.internal.imsglobal.com", port=8080, username="username",password="password"))
         devtools::install_github("berndbischl/ParamHelpers")
         ```
     * ranger
