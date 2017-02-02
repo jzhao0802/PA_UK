@@ -10,19 +10,22 @@ library(parallel)
 library(parallelMap)
 library(ggplot2)
 library(plotmo)
+source("palab_model/palab_model.R")
 
 # ------------------------------------------------------------------------------
 # Define main varaibles
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = FALSE
+matching = TRUE
 
 # Define dataset and var_config paths
 if (matching){
-  data_file = "data/breast_cancer_matched.csv"
+  # data_file = "data/breast_cancer_matched.csv"
+  data_file = "data/breast_cancer_matched_clustering.csv"
 }else{
   data_file = "data/breast_cancer.csv"
+  # data_file = "data/breast_cancer_clustering.csv"
 }
 var_config_file = "data/breast_cancer_var_config.csv"
 
@@ -40,17 +43,17 @@ random_search_iter <- 50L
 set.seed(random_seed, "L'Ecuyer")
 
 # Load breast cancer dataset and var_config
-df <- readr::read_csv(data_file)  
+df <- readr::read_csv(data_file)
 var_config <- readr::read_csv(var_config_file)
 
 if (matching){
   # Build dataframe that holds fold membership of each sample
-  ncv <- data.frame(id=1:nrow(df), outer_fold=df$outer_fold, 
-                    inner_fold=df$inner_fold)
+  match_df <- matching_to_indices(data.frame(id=df$ID, match=df$match))
+  ncv <- data.frame(id=match_df$id, match=match_df$match,
+                    outer_fold=df$outer_fold, inner_fold=df$inner_fold)
 }
 
 # Make sure to only retain the numerical columns
-source("palab_model/palab_model.R")
 ids <- get_ids(df, var_config)
 df <- get_variables(df, var_config)
 
@@ -64,9 +67,20 @@ target = "Class"
 # Setup modelling in mlR
 # ------------------------------------------------------------------------------
 
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+# CHECK IF MATCHED DATASET AND NCV AGREE ON WHO'S POSITIVE. THEY DON'T SEEM TO.
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # Setup the classification task in mlR, explicitely define positive class
+
 dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
-dataset <- hclust_downsampling(dataset)
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -80,7 +94,8 @@ pos_class_w <- get_class_freqs(dataset)
 iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
 dataset$weights <- as.numeric(iw)
 
-# Define logistic regression with elasticnet penalty
+# Define logistic regression with elasticnet penalty - each feature will be 
+# standardised internally and the returned coefs are scaled back.
 lrn <- makeLearner("classif.glmnet", predict.type="prob", predict.threshold=0.5)
 
 # Find max lambda as suggested here: 

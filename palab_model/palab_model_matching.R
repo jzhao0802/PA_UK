@@ -91,7 +91,7 @@ nested_cv_matched_ix <- function(match_df, outer_fold_n=5, inner_fold_n=5,
   match_df
 }
 
-matching_to_indices <- function(match_df, key){
+matching_to_indices <- function(match_df, key=NULL){
   # match_df is a dataframe with two columns: "id", and "match". Each row in 
   # match_df links samples with unique string identifiers to each other. 
   # Samples from the positive class are linked with themselves. The key input 
@@ -100,17 +100,27 @@ matching_to_indices <- function(match_df, key){
   # frame with "id" and "match" columns, where the matching information is
   # represented by row indicies in the dataframe, as defined by the key, i.e.
   # it describes which row is linked with which in the dataframe.
+  # If no key is supplied it simply turns a match_df with strings into an 
+  # integer representation match_df
   
   library(hash)
+  
   # check if IDs are unique
   n_unique <- length(unique(match_df$id))
   n_id <- length(match_df$id)
   if( n_unique != n_id){
     stop("Not all IDs are unique in the match_df dataframe.")
   }
-  n_unique_key <- length(unique(key))
-  if( n_unique_key != n_id){
-    stop("Not all IDs are unique in the key.")
+  
+  # check key and reorder match_df by it
+  if (!is.null(key)){
+    n_unique_key <- length(unique(key))
+    if( n_unique_key != n_id){
+      stop("Not all IDs are unique in the key.")
+    }
+    # TODO!! check if all IDs in the key are in the match
+    rownames(match_df)  <- match_df$id
+    match_df <- match_df[key,]
   }
   
   # check if there are any positives
@@ -119,12 +129,6 @@ matching_to_indices <- function(match_df, key){
   if(sum(ids == matches) == 0){
     stop("There aren't any positive samples in this matching dataframe.")
   }
-  
-  # TODO!! check if all IDs in the key are in the match
-  
-  # reorder match_df by the key column
-  rownames(match_df)  <- match_df$id
-  match_df <- match_df[key,]
   
   # turn IDs into integers
   id <- 1:nrow(match_df)

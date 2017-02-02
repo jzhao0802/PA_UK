@@ -75,7 +75,6 @@ makeResamplePrediction = function(instance, preds.test, preds.train) {
     pall = preds.train
   }
   
-  
   makeS3Obj(c("ResamplePrediction", class(p1)),
             instance = instance,
             predict.type = p1$predict.type,
@@ -95,7 +94,7 @@ exportMlrOptions = function(level) {
 # TUNE OUTER FOLD WITH MATCHING AND PREDEFINED CV
 # ------------------------------------------------------------------------------
 
-tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures, 
+tune_outer_fold <- function(ncv, learner, task, outer_fold, ps, ctrl, measures, 
                             show_info=F){
   # This function is a modified replicate of mlR's doResampleIteration function
   # in the resample.R. We do this basically so we end up with the results having
@@ -106,10 +105,10 @@ tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures,
   library(stringi)
   
   # Define test and train datasets in the outer fold and print them
-  test_fold_ncv <- ncv[ncv$outer_fold == i,]
+  test_fold_ncv <- ncv[ncv$outer_fold == outer_fold,]
   test_fold_ids <- test_fold_ncv$id
   test_data <- subsetTask(task, subset=test_fold_ids)
-  train_fold_ncv <- ncv[ncv$outer_fold != i,]
+  train_fold_ncv <- ncv[ncv$outer_fold != outer_fold,]
   train_fold_ids <- train_fold_ncv$id
   train_data <- subsetTask(task, subset=train_fold_ids)
   
@@ -123,6 +122,7 @@ tune_outer_fold <- function(ncv, learner, task, i, ps, ctrl, measures,
                           measures=measures)
   time2 <- Sys.time()
   runtime <- as.numeric(difftime(time2, time1, units="mins"))
+  
   # Make learner with best params and predict test data
   lrn_outer <- setHyperPars(learner, par.vals=lrn_inner$x)
   
