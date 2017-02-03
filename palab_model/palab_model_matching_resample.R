@@ -1,6 +1,6 @@
 
 # ------------------------------------------------------------------------------
-# OVERWRITE MLR RESAMPLING WITH PREDEFINED CV FOLDS
+# Overwrite mlr resampling with predefined cv folds
 # ------------------------------------------------------------------------------
 
 get_matched_cv_folds <- function(ncv, fold="inner_fold"){
@@ -36,7 +36,7 @@ get_matched_cv_folds <- function(ncv, fold="inner_fold"){
 }
 
 # ------------------------------------------------------------------------------
-# HIDDEN HELPER FUNCTIONS FROM MLR COPIED IN HERE
+# Hidden helper functions from mlr copied in here
 # ------------------------------------------------------------------------------
 
 getTaskFactorLevels <-  function(task) {
@@ -91,7 +91,7 @@ exportMlrOptions = function(level) {
 }
 
 # ------------------------------------------------------------------------------
-# TUNE OUTER FOLD WITH MATCHING AND PREDEFINED CV
+# Tune outer fold with matching and predefined cv
 # ------------------------------------------------------------------------------
 
 tune_outer_fold <- function(ncv, learner, task, outer_fold, ps, ctrl, measures, 
@@ -180,7 +180,7 @@ tune_outer_fold <- function(ncv, learner, task, outer_fold, ps, ctrl, measures,
 }
 
 # ------------------------------------------------------------------------------
-# MERGE RESULTS FROM TUNE OUTER MODELS
+# Merge results from tune outer models
 # ------------------------------------------------------------------------------
 
 merge_outer_models <- function(learner, task, results, measures, outer_cv, 
@@ -241,7 +241,7 @@ merge_outer_models <- function(learner, task, results, measures, outer_cv,
 }
 
 # ------------------------------------------------------------------------------
-# REPLICATE MLR'S NESTED RESAMPLING FUNCTION WITH SAMPLE MATCHING
+# Replicate mlr's nested resampling function WITH MATCHING
 # ------------------------------------------------------------------------------
 
 palab_resample <- function(learner, task, ncv, ps, ctrl, measures, show_info=F){

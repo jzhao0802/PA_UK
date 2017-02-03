@@ -70,3 +70,5 @@ All models work with matched and unmatched data, see corresponding folders for t
     * parallel
     * parallelMap
     * ggplot2
+    * yakmoR
+    * fastcluster

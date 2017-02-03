@@ -4,6 +4,10 @@
 #
 # ------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------
+# Define wrapper functions for hierarchical and k-means clustering
+# ------------------------------------------------------------------------------
+
 do_hclust <- function(data, k=3, dist_m="euclidean", agg_m="complete"){
   # This function performs fast hierarchical clustering on a piece of data and 
   # cuts the resulting tree into k clusters. It returns a list where each sample
@@ -37,7 +41,7 @@ do_kmeans <- function(data, k=3, rounds=5){
   # clusters.
   library(yakmoR)
   
-  kmod <- yakmoR::orthoKMeansTrain(as.matrix(neg_data), k=k, rounds=rounds)
+  kmod <- yakmoR::orthoKMeansTrain(as.matrix(data), k=k, rounds=rounds)
   
   # choose best run and return its cluster_memberships and centroids
   best_ix <- order(kmod$obj, decreasing=T)[1]
@@ -47,6 +51,10 @@ do_kmeans <- function(data, k=3, rounds=5){
   return(list(centroids=centroids, cluster_membership=cluster_membership))
 }
 
+# ------------------------------------------------------------------------------
+# Functions for calculating centroids, and nearest points to centroids
+# ------------------------------------------------------------------------------
+
 get_centroids <- function(data, cluster_membership, method=mean){
   # Given a dataset and a clusters vector, holding the cluster membership for 
   # each sample in the data, it will return the centroids (mean or median) for
@@ -54,7 +62,7 @@ get_centroids <- function(data, cluster_membership, method=mean){
   
   # this will extract the mean of each feature for each centroid
   get_centroid_mean_median <- function(i, method){
-    unlist(lapply(data[clusters==i,], mean))
+    unlist(lapply(data[cluster_membership==i,], mean))
   }
   
   # get centroid for all clusters
@@ -69,7 +77,10 @@ get_closest_witihin_cluster_points <- function(data, cluster_membership,
                                               centroids, dist_m="euclidean", n){
   # Given a dataset, a vector of cluster membership of each sample and a list of
   # centroids in the space spanned by the data, we return the n closest samples
-  # within each cluster. It returns a dataframe where the 
+  # within each cluster. It returns a index of the samples in data, that should 
+  # be kept. n should be a list with length = number of centroids, each element 
+  # defining the number of negatives that should be returned for the given 
+  # centroid. If it's just an integer, it will be repeated #centroid times.
   
   # sanity checks
   clusters <- unique(cluster_membership)
@@ -82,6 +93,11 @@ get_closest_witihin_cluster_points <- function(data, cluster_membership,
              "minkowski")
   if(!dist_m %in% dists)
     stop("dist_m must be one of: ", paste(dists, collapse=", "))
+  if (length(n) == 1)
+    n <-  rep(n, dim(centroids)[1])
+  if (length(n) != dim(centroids)[1])
+    stop("Number of centroids does not match length of list of required closest 
+         points.")
   
   get_pair_dist <- function(i){
     # This simply returns the distance between the centroid and a sample from
@@ -89,30 +105,33 @@ get_closest_witihin_cluster_points <- function(data, cluster_membership,
     dist(rbind(cluster_data[i, ],centroid), method=dist_m)
   }
   
+  # variables for keeping track of results
   data_ix <- 1:nrow(data)
-  n <- as.integer(n)
-  # variables holding the results
   samples_closest_ix <- c()
-  cluster_num <- c()
   
   # Iterate through the cluster centroids and get the closest points to them
-  for (c in clusters){
+  for (c in 1:n_clusters){
     centroid <- centroids[c, ]
-    cluster_data_ix <- data_ix[clusters==c]
-    cluster_data <- data[clusters==c, ]
+    cluster_data_ix <- data_ix[cluster_membership==clusters[c]]
+    cluster_data <- data[cluster_data_ix, ]
     cluster_data_N <- length(cluster_data_ix)
     # get distance of each point in the cluster to the centroid
     centroid_cluster_dists <- unlist(lapply(1:cluster_data_N, get_pair_dist))
     # get closest n
-    closest_n_ix <- order(centroid_cluster_dists)[1:n]
+    closest_n_ix <- order(centroid_cluster_dists)[1:as.integer(n[c])]
+    # if the user asked for more n than we have, ignore it
+    closest_n_ix <- closest_n_ix[!is.na(closest_n_ix)]
     # save selected rows
     samples_closest_ix <- c(samples_closest_ix, cluster_data_ix[closest_n_ix])
-    cluster_num <- c(cluster_num, rep(c, n))
   }
-  data.frame(closest=samples_closest_ix, cluster=cluster_num)
+  samples_closest_ix
 }
 
-cluster_negatives <- function(dataset, ratio=1, method="hclust", matched=F, 
+# ------------------------------------------------------------------------------
+# Clustering negatives (majority class)
+# ------------------------------------------------------------------------------
+
+cluster_negatives <- function(dataset, ratio=1, method="hclust", matching=F, 
                               ncv=NULL, dist_m="euclidean", agg_m="complete"){
   # This function takes in an binary mlr dataset, clusters the negative samples
   # hierarchically based on the distance measure and agglomeration method. Then
@@ -146,24 +165,43 @@ cluster_negatives <- function(dataset, ratio=1, method="hclust", matched=F,
     stop("This function only makes sense if we have more neg than pos samples.")
   neg_data <- data[neg_ix,]
   neg_data <- data_without_target(neg_data, target)
+  # normalize so euclidean distance based clustering is sensibe across features
+  # neg_data <- normalizeFeatures(neg_data, method="standardize")
   pos_data <- data[pos_ix,]
   
-  if (matched){
+  if (matching){
     # we have matching, no clustering is needed, we just find centroids of 
     # negatives for each positive and return the closest n to the centroid
     if (is.null(ncv))
       stop("You must provide an ncv data frame!")
-    cluster_membership <- ncv[neg_ix,"match"]
+    
+    # store the positives part of the ncv
+    pos_ncv <- ncv[pos_ix,]
+    # cluster membership is simply defined by the matching
+    cluster_membership <- ncv[neg_ix, "match"]
+    # find the centroids of each negative match cluster
     centroids <- get_centroids(neg_data, cluster_membership, method=mean)
-    # if we want more than 1 sample per positive we have to find closest ones
+    # keep only the first match of every cluster in the negative part of ncv
+    neg_ncv <- ncv[which(neg_ix),]
+    neg_ncv <-  ncv[!duplicated(ncv$match),]
+    
+    # if we want more than 1 sample per positive we have to find closest samples 
+    # to the centroid and we cannot simply use the centroid
     if (ratio > 1){
       closest <- get_closest_witihin_cluster_points(neg_data, cluster_membership,
                                                     centroids, n=ratio)
-      centroids <- neg_data[closest$closest,]
+      # downsample negative data to only keep the closest
+      centroids <- neg_data[closest,]
+      # downsample the negative part of ncv to only hold the closest samples
+      neg_ncv <- ncv[which(neg_ix)[closest],]
     }
+    # merge pos and neg ncv
+    ncv <- rbind(pos_ncv, neg_ncv)
   }else{
     # cluster data with either hclust or kmeans and get the clusters' centroids
     c_num <- as.integer(pos_N * ratio)
+    if (c_num >= sum(neg_ix))
+      stop("The number of clusters have to be less than the number of negs.")
     if (method == "hclust"){
       cluster_membership <- do_hclust(neg_data, c_num, dist_m, agg_m)
       centroids <- get_centroids(neg_data, cluster_membership, method=mean)
@@ -174,7 +212,7 @@ cluster_negatives <- function(dataset, ratio=1, method="hclust", matched=F,
   }
   
   # add back the factor target - bunch of zeros
-  centroids[target] <- factor(rep(dataset$task.desc$negative, pos_N), 
+  centroids[target] <- factor(rep(dataset$task.desc$negative, dim(centroids)[1]), 
                               levels=levels(data[[target]]))
   
   # merge positives with the downsampled negatives
@@ -184,10 +222,121 @@ cluster_negatives <- function(dataset, ratio=1, method="hclust", matched=F,
   
   # return results
   if (matching){
-    # downsample the ncv as well
-    ncv <- ncv[c(which(pos_ix), c$closest),] 
     return(list(dataset=new_dataset, ncv=ncv))
   }else{
     return(new_dataset)
   }
 }
+
+# ------------------------------------------------------------------------------
+# Clustering positives (minority class)
+# ------------------------------------------------------------------------------
+
+cluster_positives <- function(dataset, ratio=1, k, method="hclust", matching=F, 
+                              ncv=NULL, dist_m="euclidean", agg_m="complete"){
+  # This function clusters the positive (minority) class into k clusters using
+  # kmeans or hierarchical clustering. Then it finds the closest negative 
+  # samples to the centroids of these clusters. It can preserve matching if
+  # needed.
+  
+  library(hash)
+  
+  # sanity checks
+  if (!inherits(dataset, "ClassifTask"))
+    stop("dataset must be an mlr classification dataset ")
+  if (length(dataset$task.desc$class.levels) > 2)
+    stop("This function only works for binary outcome variables.")
+  
+  # cut and split data 
+  data <- getTaskData(dataset)
+  target <- dataset$task.desc$target
+  positive_flag <- dataset$task.desc$positive
+  negative_flag <- dataset$task.desc$negative
+  pos_ix <- data[[target]] == positive_flag
+  neg_ix <- data[[target]] == negative_flag
+  pos_N <- sum(pos_ix)
+  if (sum(neg_ix) < pos_N)
+    stop("This function only makes sense if we have more neg than pos samples.")
+  neg_data <- data[neg_ix,]
+  neg_data <- data_without_target(neg_data, target)
+  # normalize so euclidean distance based clustering is sensibe across features
+  # neg_data <- normalizeFeatures(neg_data, method="standardize")
+  pos_data <- data[pos_ix,]
+  pos_data <- data_without_target(pos_data, target)
+  # pos_data <- normalizeFeatures(pos_data, method="standardize")
+  
+  # cluster pos data with hclust or kmeans into k clusters, then get centroids
+  if (method == "hclust"){
+    pos_cluster_membership <- do_hclust(pos_data, k, dist_m, agg_m)
+    centroids <- get_centroids(pos_data, pos_cluster_membership, method=mean)
+  }else if (method == "kmeans"){
+    km <- do_kmeans(pos_data, k)
+    pos_cluster_membership <- unlist(km$cluster_membership)+1
+    centroids <- km$centroids
+  }
+  
+  # get number of samples in each positive cluster
+  ns <- as.integer(table(pos_cluster_membership)[unique(pos_cluster_membership)])
+  
+  # depending on matching we need to proceed differently
+  if (matching){
+    if (is.null(ncv))
+      stop("You must provide an ncv data frame!")
+    pos_ncv <- ncv[pos_ix,]
+    neg_ncv <- ncv[neg_ix,]
+  
+    # make a hash: pos_id: cluster_mem
+    h <-hash(keys=as.character(pos_ncv$id), values=pos_cluster_membership)
+    # map match column of negs to pos centroid centers
+    cluster_membership <- unlist(lapply(neg_ncv$match, 
+                                        function(x) h[[as.character(x)]]))
+    # get closest matching samples to the positive centroids
+    closest <- get_closest_witihin_cluster_points(neg_data, cluster_membership,
+                                                  centroids, n=ns*ratio)
+    # downsample negative data to only keep the closest
+    centroids <- neg_data[closest,]
+    # downsample the negative part of ncv to only hold the closest samples
+    neg_ncv <- ncv[which(neg_ix)[closest],]
+    # merge pos and neg ncv
+    ncv <- rbind(pos_ncv, neg_ncv)
+  }else{
+    # using the centroids of the pos run kmeans on the neg data to get cluster_mem
+    km <- kmeans(neg_data, centroids, iter.max=1)
+    # then find the negs that are closest to their pos cluster
+    
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    
+    # MANY TIMES THIS FAILS BECAUSE ONE OF THE POSITIVE CENTROIDS WILL END UP
+    # BEING EMPTY, IE NO NEGATIVES WILL GET ASSIGNED TO THIS - TALK TO JOHN
+    
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    cluster_membership <- as.numeric(km$cluster)
+    closest <- get_closest_witihin_cluster_points(neg_data, cluster_membership,
+                                                  centroids, n=ns*ratio)
+    # downsample negative data to only keep the closest
+    centroids <- neg_data[closest,]
+  }
+  
+  # add back the factor target to both pos and neg data
+  pos_data[target] <- factor(rep(positive_flag, dim(pos_data)[1]), 
+                              levels=levels(data[[target]]))
+  centroids[target] <- factor(rep(negative_flag, dim(centroids)[1]), 
+                              levels=levels(data[[target]]))
+  
+  # merge positives with the downsampled negatives
+  new_data <- rbind(pos_data, centroids)
+  new_dataset <- makeClassifTask(id=dataset$task.desc$id, data=new_data, 
+                                 target=target, positive=positive_flag)
+  
+  # return results
+  if (matching){
+    return(list(dataset=new_dataset, ncv=ncv))
+  }else{
+    return(new_dataset)
+  }
+}
+  
