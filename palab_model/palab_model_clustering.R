@@ -69,7 +69,7 @@ get_centroids <- function(data, cluster_membership, method=mean){
   clusters <- unique(cluster_membership)
   centroids <- lapply(clusters, get_centroid_mean_median, method=method)
   centroids <- as.data.frame(t(as.data.frame(centroids)))
-  rownames(centroids) <- NULL
+  rownames(centroids) <- as.character(unique(cluster_membership))
   centroids
 }
 
@@ -81,23 +81,26 @@ get_closest_witihin_cluster_points <- function(data, cluster_membership,
   # be kept. n should be a list with length = number of centroids, each element 
   # defining the number of negatives that should be returned for the given 
   # centroid. If it's just an integer, it will be repeated #centroid times.
+  # Centroids should be a data frame with rownames corresponding to the actual
+  # items in cluster_membership, i.e. it needn't to be an increasing list of int
   
+  library(fields)
+
   # sanity checks
-  clusters <- unique(cluster_membership)
-  n_clusters <- length(clusters)
-  if (n_clusters != dim(centroids)[1])
-    stop("The number of clusters must match the number of centroids.")
+  clusters <- rownames(centroids)
+  n_clusters <- length(unique(cluster_membership))
+  #if (n_clusters != dim(centroids)[1])
+  #  stop("The number of clusters must match the number of centroids.")
   if (dim(data)[2] != dim(centroids)[2])
     stop("The dimension of the data and the centroids must be the same.")
   dists <- c("euclidean", "maximum", "manhattan", "canberra", "binary", 
              "minkowski")
   if(!dist_m %in% dists)
     stop("dist_m must be one of: ", paste(dists, collapse=", "))
-  if (length(n) == 1)
-    n <-  rep(n, dim(centroids)[1])
+  if (inherits(n, c("numeric", "integer")))
+    n <- setNames(as.list(rep(n, n_clusters)), clusters)
   if (length(n) != dim(centroids)[1])
-    stop("Number of centroids does not match length of list of required closest 
-         points.")
+    stop("Num of centroids does not match num of required closest points.")
   
   get_pair_dist <- function(i){
     # This simply returns the distance between the centroid and a sample from
@@ -110,30 +113,20 @@ get_closest_witihin_cluster_points <- function(data, cluster_membership,
   samples_closest_ix <- c()
   
   # Iterate through the cluster centroids and get the closest points to them
-  for (c in 1:n_clusters){
-    centroid <- centroids[c, ]
-    cluster_data_ix <- data_ix[cluster_membership==clusters[c]]
+  for (c in clusters){
+    centroid <- centroids[as.character(c), ]
+    cluster_data_ix <- data_ix[cluster_membership==c]
     cluster_data <- data[cluster_data_ix, ]
-    cluster_data_N <- length(cluster_data_ix)
     # get distance of each point in the cluster to the centroid
-    centroid_cluster_dists <- unlist(lapply(1:cluster_data_N, get_pair_dist))
+    centroid_cluster_dists <- fields::rdist(centroid, cluster_data)
     # get closest n
-    closest_n_ix <- order(centroid_cluster_dists)[1:as.integer(n[c])]
+    closest_n_ix <- order(centroid_cluster_dists)[1:n[[c]]]
     # if the user asked for more n than we have, ignore it
     closest_n_ix <- closest_n_ix[!is.na(closest_n_ix)]
     # save selected rows
     samples_closest_ix <- c(samples_closest_ix, cluster_data_ix[closest_n_ix])
   }
   samples_closest_ix
-}
-
-get_closest_centroid <- function(point, centroids, dist_m="euclidean"){
-  get_pair_dist <- function(i){
-    dist(rbind(centroids[i, ], point), method=dist_m)
-  }
-  dists <- unlist(lapply(1:dim(centroids)[1], get_pair_dist))
-  # return the index of closest centroid
-  order(dists)[1]
 }
 
 # ------------------------------------------------------------------------------
@@ -249,6 +242,7 @@ cluster_positives <- function(dataset, ratio=1, k, method="hclust", matching=F,
   # needed.
   
   library(hash)
+  library(fields)
   
   # sanity checks
   if (!inherits(dataset, "ClassifTask"))
@@ -280,13 +274,14 @@ cluster_positives <- function(dataset, ratio=1, k, method="hclust", matching=F,
     pos_cluster_membership <- do_hclust(pos_data, k, dist_m, agg_m)
     pos_centroids <- get_centroids(pos_data, pos_cluster_membership, method=mean)
   }else if (method == "kmeans"){
-    km <- do_kmeans(pos_data, k)
+    km <- do_kmeans(pos_data, k, rounds=10)
     pos_cluster_membership <- unlist(km$cluster_membership)+1
     pos_centroids <- km$centroids
   }
   
-  # get number of samples in each positive cluster
-  ns <- as.integer(table(pos_cluster_membership)[unique(pos_cluster_membership)])
+  # get number of samples in each positive cluster and turn it into a named list
+  ns <- table(pos_cluster_membership)[unique(pos_cluster_membership)]
+  ns <- as.list(ns*ratio)
   
   # depending on matching we need to proceed differently
   if (matching){
@@ -302,7 +297,7 @@ cluster_positives <- function(dataset, ratio=1, k, method="hclust", matching=F,
                                         function(x) h[[as.character(x)]]))
     # get closest matching samples to the positive centroids
     closest <- get_closest_witihin_cluster_points(neg_data, cluster_membership,
-                                                  pos_centroids, n=ns*ratio)
+                                                  pos_centroids, n=ns)
     # downsample negative data to only keep the closest
     centroids <- neg_data[closest,]
     # downsample the negative part of ncv to only hold the closest samples
@@ -314,14 +309,14 @@ cluster_positives <- function(dataset, ratio=1, k, method="hclust", matching=F,
     # does not work here because many times certain pos_centroids end up with 0
     # assigned negative samples and this causes an error from base::kmeans, try:
     # km <- kmeans(neg_data, pos_centroids, iter.max=1)
-    dists <- dist(rbind(neg_data, pos_centroids))
-    # subset dist matrix to get what we need
-    dists <- as.data.frame(as.matrix(dists))[neg_N:(neg_N+k),1:neg_N]
-    cluster_membership <- as.numeric(lapply(dists, function(x) which(x==min(x))))
+    dists <- fields::rdist(neg_data, pos_centroids)
+    # if zero negatives are assigned to a positive cluster/centroid we will not
+    # select any negatives for that cluster later
+    cluster_membership <- apply(dists, 1, function(x) which(x==min(x)))
     
     # then find the negs that are closest to their pos cluster
     closest <- get_closest_witihin_cluster_points(neg_data, cluster_membership,
-                                                  pos_centroids, n=ns*ratio)
+                                                  pos_centroids, n=ns)
     # downsample negative data to only keep the closest
     centroids <- neg_data[closest,]
   }
