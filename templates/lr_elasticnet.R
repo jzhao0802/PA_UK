@@ -17,12 +17,12 @@ source("palab_model/palab_model.R")
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = TRUE
+matching = FALSE
 
 # Define dataset and var_config paths
 if (matching){
-  # data_file = "data/breast_cancer_matched.csv"
-  data_file = "data/breast_cancer_matched_clustering.csv"
+  data_file = "data/breast_cancer_matched.csv"
+  # data_file = "data/breast_cancer_matched_clustering.csv"
 }else{
   data_file = "data/breast_cancer.csv"
   # data_file = "data/breast_cancer_clustering.csv"
@@ -46,11 +46,9 @@ set.seed(random_seed, "L'Ecuyer")
 df <- readr::read_csv(data_file)
 var_config <- readr::read_csv(var_config_file)
 
+# Get the matching information from the df
 if (matching){
-  # Build dataframe that holds fold membership of each sample
-  match_df <- matching_to_indices(data.frame(id=df$ID, match=df$match))
-  ncv <- data.frame(id=match_df$id, match=match_df$match,
-                    outer_fold=df$outer_fold, inner_fold=df$inner_fold)
+  matches <- as.factor(df$match)
 }
 
 # Make sure to only retain the numerical columns
@@ -68,8 +66,11 @@ target = "Class"
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
-
 dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
+# If we have matching we can use blocking to preserve them through nested cv
+if(matching){
+  dataset$blocking <- matches
+} 
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -78,10 +79,10 @@ dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
 dataset
 get_class_freqs(dataset)
 
-# Make sure we sample according to inverse class frequency 
-pos_class_w <- get_class_freqs(dataset)
-iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-dataset$weights <- as.numeric(iw)
+# Do we want glmnet to uses the class weights?
+# pos_class_w <- get_class_freqs(dataset)
+# iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
+# dataset$weights <- as.numeric(iw)
 
 # Define logistic regression with elasticnet penalty - each feature will be 
 # standardised internally and the returned coefs are scaled back.
@@ -102,6 +103,10 @@ ps <- makeParamSet(
 # For Lasso penalty do:
 # lrn <- setHyperPars(lrn, alpha=1)
 
+# ------------------------------------------------------------------------------
+# Setup rest of the nested CV in mlR
+# ------------------------------------------------------------------------------
+
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
 # tunes the classifier's decision threshold in inner folds but it takes forever
 ctrl <- makeTuneControlRandom(maxit=random_search_iter, tune.threshold=F)
@@ -114,17 +119,21 @@ m4 <- setAggregation(auc, test.sd)
 # It's always the first in the list that's used to rank hyper-params in tuning.
 m_all <- list(pr10, m2, m3, m4)
 
-if (!matching){
-  # Define outer and inner resampling strategies
-  outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
-  
-  # The inner could be "Subsample" if we don't have enough positive samples
-  inner <- makeResampleDesc("CV", iters=3, stratify=T)
-  
-  # Define wrapped learner: this is mlR's way of doing nested CV on a learner
-  lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
-                              show.info=F, measures=m_all)
+# Define outer and inner resampling strategies
+outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
+
+# The inner could be "Subsample" if we don't have enough positive samples
+inner <- makeResampleDesc("CV", iters=3, stratify=T)
+
+# If we have matching then stratification is done implicitely through matching
+if (matching){
+  outer$stratify <- FALSE
+  inner$stratify <- FALSE
 }
+
+# Define wrapped learner: this is mlR's way of doing nested CV on a learner
+lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
+                            show.info=F, measures=m_all)
 
 # ------------------------------------------------------------------------------
 # Run training with nested CV
@@ -134,12 +143,8 @@ if (!matching){
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
-if (matching){
-  res <- palab_resample(lrn, dataset, ncv, ps, ctrl, m_all, show_info=T)
-}else{
-  res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
+res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
                   extract=getTuneResult, show.info=F, measures=m_all)  
-}
 
 parallelStop()
 
@@ -188,7 +193,7 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # ------------------------------------------------------------------------------
 
 # If you don't need the ROC curve just set it to FALSE.
-plot_pr_curve(res, roc=T)
+plot_pr_curve(res$pred, roc=T)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -226,6 +231,10 @@ plotmo::plot_glmnet(lrn_outer_model, s=best_mean_params$s, main="Average model")
 
 # Accessing params just like above, note that the mean s is over-regularising
 coef(lrn_outer_model, s=best_mean_params$s)
+
+# Plot a PR and ROC curve for this new model
+pred_outer <- predict(lrn_outer_trained, dataset)
+plot_pr_curve(pred_outer, roc=T)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance

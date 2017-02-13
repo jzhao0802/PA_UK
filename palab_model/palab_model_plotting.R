@@ -31,15 +31,20 @@ get_truth_pred <- function(pred){
   results
 }
 
-plot_pr_curve <- function(results, roc=TRUE){
+plot_pr_curve <- function(pred, roc=TRUE){
   library(PRROC)
   # Get probabilities and truth
-  tb <- get_truth_pred(results$pred)
+  tb <- get_truth_pred(pred)
   
-  # Retain only the predictions on the test set
-  df <- as.data.frame(results$pred)
-  truth <- tb$truth[df$set=="test"]
-  prob <- tb$prob[df$set=="test"]
+  # Retain only the predictions on the test set if pred is from nested cv
+  if ("set" %in% colnames(as.data.frame(pred))){
+    df <- as.data.frame(pred)
+    truth <- tb$truth[df$set=="test"]
+    prob <- tb$prob[df$set=="test"]
+  }else{
+    truth <- tb$truth
+    prob <- tb$prob
+  }
   
   # Plot ROC curve first so it's the 2nd plot once this function is run
   if (roc){

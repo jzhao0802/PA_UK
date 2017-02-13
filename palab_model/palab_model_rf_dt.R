@@ -16,9 +16,17 @@ get_vi_table <- function(model, dataset, decimal=3){
   if (is(model, "TuneModel")){
     model <- getLearnerModel(model, more.unwrap = T)
   }
-  vi <- model$variable.importance
+  if (inherits(model, "xgb.Booster")){
+    feat_names <- getTaskFeatureNames(dataset)
+    tmp <- xgboost::xgb.importance(feature_names=feat_names, model=model)
+    vi <- tmp$Gain
+  }else{
+    vi <- model$variable.importance  
+  }
   vi <- sort(vi/sum(vi)*100, decreasing=T)
   vi <- data.frame(VI=vi)
+  if (inherits(model, "xgb.Booster"))
+    rownames(vi) <- tmp$Feature
   
   # Calculate correlation between predictors and outcome
   target <- dataset$task.desc$target
@@ -33,9 +41,8 @@ get_vi_table <- function(model, dataset, decimal=3){
   decimal_rounder(vi, decimal)
 }
 
-plot_all_rf_vi <- function(results, decimal=2, aggregate=F){
+plot_all_rf_vi <- function(results, decimal=2, aggregate=F, dataset=NULL){
   library(scales)
-
   outer_fold_n <- length(results$models)
   vis <- c()
   iters <- c()
@@ -43,10 +50,20 @@ plot_all_rf_vi <- function(results, decimal=2, aggregate=F){
   
   for (i in 1:outer_fold_n){
     model <- getLearnerModel(results$models[[i]], more.unwrap = T)
-    vi <- as.numeric(model$variable.importance)
+    
+    if (inherits(model, "xgb.Booster")){
+      # extracting VI from XGBoost
+      feat_names <- getTaskFeatureNames(dataset)
+      tmp <- xgboost::xgb.importance(feature_names=feat_names, model=model)
+      vi <- tmp$Gain
+      vars <- c(vars, tmp$Feature)
+    }else{
+        # extracting VI from RF and DT
+        vi <- as.numeric(model$variable.importance)
+        vars <- c(vars, names(model$variable.importance))
+    }
     vi <- vi/sum(vi)*100
     vis <- c(vis, vi)
-    vars <- c(vars, names(model$variable.importance))
     iters <- c(iters, rep(i, length(vi)))
   }
   
@@ -105,7 +122,15 @@ plot_rf_vi <- function(model, title='', subplot=FALSE){
     model <- getLearnerModel(model, more.unwrap = T)
   }
   par(mar=c(5.1,10.1,4.1,2.1))
-  vi <- model$variable.importance
+  if (inherits(model, "xgb.Booster")){
+    feat_names <- getTaskFeatureNames(dataset)
+    tmp <- xgboost::xgb.importance(feature_names=feat_names, model=model)
+    vi <- tmp$Gain
+    names(vi) <- tmp$Feature
+  }else{
+    vi <- model$variable.importance  
+  }
+  
   vi <- vi/max(vi)
   barplot(sort(vi), horiz = T, las=2, main=title)
   

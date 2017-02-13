@@ -9,7 +9,6 @@ library(readr)
 library(parallel)
 library(parallelMap)
 library(ggplot2)
-source("palab_model/palab_model.R")
 
 # ------------------------------------------------------------------------------
 # Define main varaibles
@@ -21,10 +20,8 @@ matching = FALSE
 # Define dataset and var_config paths
 if (matching){
   data_file = "data/breast_cancer_matched.csv"
-  # data_file = "data/breast_cancer_matched_clustering.csv"
 }else{
   data_file = "data/breast_cancer.csv"
-  # data_file = "data/breast_cancer_clustering.csv"
 }
 var_config_file = "data/breast_cancer_var_config.csv"
 
@@ -44,12 +41,14 @@ set.seed(random_seed, "L'Ecuyer")
 df <- readr::read_csv(data_file)  
 var_config <- readr::read_csv(var_config_file)
 
-# Get the matching information from the df
 if (matching){
-  matches <- as.factor(df$match)
+  # Build dataframe that holds fold membership of each sample
+  ncv <- data.frame(id=1:nrow(df), outer_fold=df$outer_fold, 
+                    inner_fold=df$inner_fold)
 }
 
 # Make sure to only retain the numerical columns
+source("palab_model/palab_model.R")
 ids <- get_ids(df, var_config)
 df <- get_variables(df, var_config)
 
@@ -65,10 +64,6 @@ target = "Class"
 
 # Setup the classification task in mlR, explicitely define positive class
 dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
-# If we have matching we can use blocking to preserve them through nested cv
-if(matching){
-  dataset$blocking <- matches
-} 
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -81,16 +76,14 @@ get_class_freqs(dataset)
 lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
 
 # Do we want glmnet to uses the class weights?
-# pos_class_w <- get_class_freqs(dataset)
-# iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-# dataset$weights <- as.numeric(iw)
+# pos_class_w <- get_class_freqs(dataset)["1"]
+# lrn <- makeWeightedClassesWrapper(lrn, wcw.weight=pos_class_w)
 
 # Define outer resampling strategies: if matched, use ncv
-outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
-
-# If we have matching then stratification is done implicitely through matching
 if (matching){
-  outer$stratify <- FALSE
+  outer <- get_matched_cv_folds(ncv, "outer_fold")
+}else{
+  outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
 }
 
 # Define performane metrics
@@ -153,7 +146,7 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # ------------------------------------------------------------------------------
 
 # If you don't need the ROC curve just set it to FALSE.
-plot_pr_curve(res$pred, roc=T)
+plot_pr_curve(res, roc=T)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -189,10 +182,6 @@ plot(lrn_outer_model)
 
 # Accessing params just like above
 summary(lrn_outer_model)
-
-# Plot a PR and ROC curve for this new model
-pred_outer <- predict(lrn_outer_trained, dataset)
-plot_pr_curve(pred_outer, roc=T)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance

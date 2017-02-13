@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#                   Nested CV with logistic regression
+#                           Nested CV with SVM
 #
 # ------------------------------------------------------------------------------
 
@@ -9,7 +9,6 @@ library(readr)
 library(parallel)
 library(parallelMap)
 library(ggplot2)
-source("palab_model/palab_model.R")
 
 # ------------------------------------------------------------------------------
 # Define main varaibles
@@ -21,16 +20,15 @@ matching = FALSE
 # Define dataset and var_config paths
 if (matching){
   data_file = "data/breast_cancer_matched.csv"
-  # data_file = "data/breast_cancer_matched_clustering.csv"
 }else{
   data_file = "data/breast_cancer.csv"
-  # data_file = "data/breast_cancer_clustering.csv"
 }
 var_config_file = "data/breast_cancer_var_config.csv"
 
 # Important variables that will make it to the result file
 random_seed <- 123
 recall_thrs <- 10
+random_search_iter <- 50L
 
 # ------------------------------------------------------------------------------
 # Load data
@@ -44,12 +42,14 @@ set.seed(random_seed, "L'Ecuyer")
 df <- readr::read_csv(data_file)  
 var_config <- readr::read_csv(var_config_file)
 
-# Get the matching information from the df
 if (matching){
-  matches <- as.factor(df$match)
+  # Build dataframe that holds fold membership of each sample
+  ncv <- data.frame(id=1:nrow(df), outer_fold=df$outer_fold, 
+                    inner_fold=df$inner_fold)
 }
 
 # Make sure to only retain the numerical columns
+source("palab_model/palab_model.R")
 ids <- get_ids(df, var_config)
 df <- get_variables(df, var_config)
 
@@ -65,10 +65,6 @@ target = "Class"
 
 # Setup the classification task in mlR, explicitely define positive class
 dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
-# If we have matching we can use blocking to preserve them through nested cv
-if(matching){
-  dataset$blocking <- matches
-} 
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -77,26 +73,49 @@ if(matching){
 dataset
 get_class_freqs(dataset)
 
-# Define logistic regression with elasticnet penalty
-lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
+# Define SVM with RBF kernel. 
+lrn <- makeLearner("classif.ksvm", predict.type="prob", predict.threshold=0.5, 
+                   par.vals = list(kernel = "rbfdot"))
 
-# Do we want glmnet to uses the class weights?
-# pos_class_w <- get_class_freqs(dataset)
-# iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-# dataset$weights <- as.numeric(iw)
+# Define hyper parameters
+ps <- makeParamSet(
+  makeNumericParam("C", lower = -5, upper = 5, trafo = function(x) 2^x),
+  makeNumericParam("sigma", lower = -5, upper = 5, trafo = function(x) 2^x)
+)
 
-# Define outer resampling strategies: if matched, use ncv
-outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
+# Define SVM with polynomial kernel. 
+# lrn <- makeLearner("classif.ksvm", predict.type="prob", predict.threshold=0.5, 
+#                    par.vals = list(kernel = "ploydot"))
 
-# If we have matching then stratification is done implicitely through matching
-if (matching){
-  outer$stratify <- FALSE
-}
+# Define hyper parameters
+# ps <- makeParamSet(
+#   makeNumericParam("C", lower = -5, upper = 5, trafo = function(x) 2^x),
+#   makeDiscreteParam("degree", values = 2:5)
+# )
+
+# Define random grid search with 100 interation per outer fold. Tune.threshold=T
+# tunes the classifier's decision threshold in inner folds but it takes forever
+ctrl <- makeTuneControlRandom(maxit=random_search_iter, tune.threshold=F)
 
 # Define performane metrics
 pr10 <- make_custom_pr_measure(recall_thrs, "pr10")
+m2 <- auc
+m3 <- setAggregation(pr10, test.sd)
+m4 <- setAggregation(auc, test.sd)
 # It's always the first in the list that's used to rank hyper-params in tuning.
-m_all <- list(pr10, auc)
+m_all <- list(pr10, m2, m3, m4)
+
+if (!matching){
+  # Define outer and inner resampling strategies
+  outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
+  
+  # The inner could be "Subsample" if we don't have enough positive samples
+  inner <- makeResampleDesc("CV", iters=3, stratify=T)
+  
+  # Define wrapped learner: this is mlR's way of doing nested CV on a learner
+  lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
+                              show.info=F, measures=m_all)
+}
 
 # ------------------------------------------------------------------------------
 # Run training with nested CV
@@ -106,8 +125,12 @@ m_all <- list(pr10, auc)
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
-res <- resample(lrn, dataset, resampling=outer, models=T, show.info=F, 
-                measures=m_all)
+if (matching){
+  res <- palab_resample(lrn, dataset, ncv, ps, ctrl, m_all, show_info=T)
+}else{
+  res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
+                  extract=getTuneResult, show.info=F, measures=m_all)  
+}
 
 parallelStop()
 
@@ -115,28 +138,31 @@ parallelStop()
 # Get results summary and all tried parameter combinations
 # ------------------------------------------------------------------------------
 
-# Get summary of results with main stats, and best parameters
 # Define extra parameters that we want to save in the results
 extra <- list("Matching"=as.character(matching),
               "NumSamples"=dataset$task.desc$size, 
               "NumFeatures"=sum(dataset$task.desc$n.feat),
               "ElapsedTime(secs)"=res$runtime, 
               "RandomSeed"=random_seed, 
-              "Recall"=recall_thrs)
+              "Recall"=recall_thrs, 
+              "IterationsPerFold"=random_search_iter)
 
 # Get summary of results with main stats, and best parameters
-results <- get_non_nested_results(res, extra=extra, decimal=5)
+results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
 
 # Get detailed results
-# results <- get_non_nested_results(res, extra=extra, detailed=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T)
 
 # Get detailed results with the actual tables
-# results <- get_non_nested_results(res, extra=extra, detailed=T, 
-#                                   all_measures=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
+#                        all_measures=T)
 
 # Save all these results into a csv
-# results <- get_non_nested_results(res, extra=extra, detailed=T, 
-#                                   all_measures=T, write_csv=T)
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
+#                        all_measures=T, write_csv=T)
+
+# For each outer fold show all parameter combinations with their perf metric
+opt_paths <- get_opt_paths(res)
 
 # ------------------------------------------------------------------------------
 # Get predictions
@@ -153,7 +179,7 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # ------------------------------------------------------------------------------
 
 # If you don't need the ROC curve just set it to FALSE.
-plot_pr_curve(res$pred, roc=T)
+plot_pr_curve(res, roc=T)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -162,14 +188,15 @@ plot_pr_curve(res$pred, roc=T)
 # Get tuned models for each outer fold
 o_models <- get_models(res)
 
-# Print model output for the first outer fold model
-summary(o_models[[1]])
+# Get support vectors, note the @ notation, this is because ksvm uses S4 objects
+o_models[[1]]@alpha
 
-# Print odds ratios and CIs
-get_odds_ratios(o_models[[1]])
+# Get index of resulting support vectors
+o_models[[1]]@alphaindex
 
-# Plot model (residuals, fitted, leverage)
-plot(o_models[[1]])
+# Get coefficients, note: unless we use linear kernel these aren't really usful,
+# and cannot be interpretted in a straighforward way.
+o_models[[1]]@coef
 
 # This is how to predict with the first model
 predict(res$models[[1]], dataset)
@@ -178,21 +205,12 @@ predict(res$models[[1]], dataset)
 # Fit model on all data with average of best params
 # ------------------------------------------------------------------------------
 
-lrn_outer <- lrn
+best_mean_params <- get_best_mean_param(results)
+lrn_outer <- setHyperPars(lrn, par.vals=best_mean_params)
 
 # Train on the whole dataset and extract model
 lrn_outer_trained <- train(lrn_outer, dataset)
 lrn_outer_model <-getLearnerModel(lrn_outer_trained, more.unwrap=T)
-
-# Plot residuals etc for model fitted on all data
-plot(lrn_outer_model)
-
-# Accessing params just like above
-summary(lrn_outer_model)
-
-# Plot a PR and ROC curve for this new model
-pred_outer <- predict(lrn_outer_trained, dataset)
-plot_pr_curve(pred_outer, roc=T)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance
@@ -206,7 +224,7 @@ theme_set(theme_minimal(base_size=10))
 # Define performance metrics we want to plot, ppv=precision, tpr=recall
 perf_to_plot <- list(fpr, tpr, ppv, mmce)
 
-# Generate the data for the plots
+# Generate the data for the plots, do aggregate=T if you want the mean
 thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
 
@@ -220,14 +238,14 @@ tuneThreshold(pred=res$pred, measure=pr10)
 # Columns that are not the target
 all_cols <- colnames(df)[colnames(df) != target]
 
-# Plot the median of the curve of each patient
-par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
+# Plot median of the curve of each patient for 1st outer model and average model
+par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
                                               all_cols, fun=median)
 plotPartialDependence(par_dep_data)
 
 # Plot partial dependence plot for all patients
-# par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
-#                                               all_cols, individual=T)
+# par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
+#                                                 all_cols, individual=T)
 # plotPartialDependence(par_dep_data)
 
 # Alternatively if you have many columns use this to plot into a multipage pdf
@@ -237,5 +255,12 @@ plotPartialDependence(par_dep_data)
 # Fit linear model to each plot and return the beta, i.e. slope
 get_par_dep_plot_slopes(par_dep_data, decimal=5)
 
-# Plot them to easily see the influence of each variable
+# Plot them to easily see the influence of each variable, p-vals are on the bars
 plot_par_dep_plot_slopes(par_dep_data, decimal=5)
+
+# ------------------------------------------------------------------------------
+# Generate hyper parameter plots for every pair of hyper parameters
+# ------------------------------------------------------------------------------
+
+# Plot a performance metric for two hyper parameters, generates .pdf
+plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder="svm_hypers")

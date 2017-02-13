@@ -9,6 +9,7 @@ library(readr)
 library(parallel)
 library(parallelMap)
 library(ggplot2)
+source("palab_model/palab_model.R")
 
 # ------------------------------------------------------------------------------
 # Define main varaibles
@@ -20,8 +21,10 @@ matching = FALSE
 # Define dataset and var_config paths
 if (matching){
   data_file = "data/breast_cancer_matched.csv"
+  # data_file = "data/breast_cancer_matched_clustering.csv"
 }else{
   data_file = "data/breast_cancer.csv"
+  # data_file = "data/breast_cancer_clustering.csv"
 }
 var_config_file = "data/breast_cancer_var_config.csv"
 
@@ -42,14 +45,12 @@ set.seed(random_seed, "L'Ecuyer")
 df <- readr::read_csv(data_file)  
 var_config <- readr::read_csv(var_config_file)
 
+# Get the matching information from the df
 if (matching){
-  # Build dataframe that holds fold membership of each sample
-  ncv <- data.frame(id=1:nrow(df), outer_fold=df$outer_fold, 
-                    inner_fold=df$inner_fold)
+  matches <- as.factor(df$match)
 }
 
 # Make sure to only retain the numerical columns
-source("palab_model/palab_model.R")
 ids <- get_ids(df, var_config)
 df <- get_variables(df, var_config)
 
@@ -65,6 +66,10 @@ target = "Class"
 
 # Setup the classification task in mlR, explicitely define positive class
 dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
+# If we have matching we can use blocking to preserve them through nested cv
+if(matching){
+  dataset$blocking <- matches
+} 
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -105,17 +110,21 @@ m4 <- setAggregation(auc, test.sd)
 # It's always the first in the list that's used to rank hyper-params in tuning.
 m_all <- list(pr10, m2, m3, m4)
 
-if (!matching){
-  # Define outer and inner resampling strategies
-  outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
-  
-  # The inner could be "Subsample" if we don't have enough positive samples
-  inner <- makeResampleDesc("CV", iters=3, stratify=T)
-  
-  # Define wrapped learner: this is mlR's way of doing nested CV on a learner
-  lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
-                              show.info=F, measures=m_all)
+# Define outer and inner resampling strategies
+outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
+
+# The inner could be "Subsample" if we don't have enough positive samples
+inner <- makeResampleDesc("CV", iters=3, stratify=T)
+
+# If we have matching then stratification is done implicitely through matching
+if (matching){
+  outer$stratify <- FALSE
+  inner$stratify <- FALSE
 }
+
+# Define wrapped learner: this is mlR's way of doing nested CV on a learner
+lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
+                            show.info=F, measures=m_all)
 
 # ------------------------------------------------------------------------------
 # Run training with nested CV
@@ -125,12 +134,8 @@ if (!matching){
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
-if (matching){
-  res <- palab_resample(lrn, dataset, ncv, ps, ctrl, m_all, show_info=T)
-}else{
-  res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
-                  extract=getTuneResult, show.info=F, measures=m_all)  
-}
+res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
+                extract=getTuneResult, show.info=F, measures=m_all)  
 
 parallelStop()
 
@@ -179,7 +184,7 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # ------------------------------------------------------------------------------
 
 # If you don't need the ROC curve just set it to FALSE.
-plot_pr_curve(res, roc=T)
+plot_pr_curve(res$pred, roc=T)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -211,6 +216,10 @@ lrn_outer <- setHyperPars(lrn, par.vals=best_mean_params)
 # Train on the whole dataset and extract model
 lrn_outer_trained <- train(lrn_outer, dataset)
 lrn_outer_model <-getLearnerModel(lrn_outer_trained, more.unwrap=T)
+
+# Plot a PR and ROC curve for this new model
+pred_outer <- predict(lrn_outer_trained, dataset)
+plot_pr_curve(pred_outer, roc=T)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance

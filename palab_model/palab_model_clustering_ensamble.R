@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#             Functions to do matching with nested cv in mlr
+#  Function incorporating clustering between inner and outer loop of nested cv
 #
 # ------------------------------------------------------------------------------
 
