@@ -13,7 +13,7 @@ library(ggplot2)
 # ------------------------------------------------------------------------------
 
 get_variables <- function(input, var_config, categorical=F) {
-  if (categorical){
+  if (categorical) {
     accepted_types <- c("numerical", "categorical")
   }else{
     accepted_types <- c("numerical")
@@ -27,9 +27,11 @@ get_variables <- function(input, var_config, categorical=F) {
     select_(.dots = var_config_accepted$Column)
   
   # Turning all categorical into factors
-  if (categorical){
-    categoricals <- var_config_accepted %>% filter_(~Type %in% accepted_types)
-    output[categoricals$Column] <- lapply(output[categoricals$Column], as.factor)
+  if (categorical) {
+    output <- output %>%
+      mutate_each_(funs(as.factor), vars = var_config_accepted %>% 
+                     filter_(~Type == "categorical") %>%
+                     .$Column)
   }
   output
 }
