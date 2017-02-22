@@ -176,28 +176,8 @@ get_closest_witihin_cluster_points <- function(data, cluster_membership,
 # ------------------------------------------------------------------------------
 # Clustering negatives (majority class)
 # ------------------------------------------------------------------------------
-
-cluster_negatives_dataset <- function(dataset, ratio=1, method="hclust", 
-                                      kmeans_repl=2, dist_m="euclidean", 
-                                      agg_m="complete"){
-  # This a wrapper around cluster_negatives() that could be called with a mlr
-  # dataset directly and will return a clustered mlr dataset.
-  
-  # sanity checks
-  if (!inherits(dataset, "ClassifTask"))
-    stop("dataset must be an mlr classification dataset ")
-  if (length(dataset$task.desc$class.levels) > 2)
-    stop("This function only works for binary outcome variables.")
-  
-  data <- getTaskData(dataset)
-  target <- dataset$task.desc$target
-  cluster_negatives(data, target, ratio=ratio, method=method, 
-                    kmeans_repl=kmeans_repl, dist_m=dist_m, agg_m=agg_m)
-}
-
-cluster_negatives <- function(data, target, ratio=1, method="hclust", 
-                              kmeans_repl=2, dist_m="euclidean", 
-                              agg_m="complete"){
+cluster_negatives <- function(dataset, ratio=1, method="hclust", kmeans_repl=2, 
+                              dist_m="euclidean", agg_m="complete"){
   # This function takes in an binary mlr dataset, clusters the negative samples
   # hierarchically based on the distance measure and agglomeration method. Then
   # it cuts the tree to form as many clusters as many positive samples we have.
@@ -212,7 +192,15 @@ cluster_negatives <- function(data, target, ratio=1, method="hclust",
   # the ratio > 1, it will return the ratio number of negatives which are the 
   # closest to the centroids.
   
+  # sanity checks
+  if (!inherits(dataset, "ClassifTask"))
+    stop("dataset must be an mlr classification dataset ")
+  if (length(dataset$task.desc$class.levels) > 2)
+    stop("This function only works for binary outcome variables.")
+  
   # cut and split data 
+  data <- getTaskData(dataset)
+  target <- dataset$task.desc$target
   positive_flag <- dataset$task.desc$positive
   pos_ix <- data[[target]] == positive_flag
   neg_ix <- data[[target]] == dataset$task.desc$negative

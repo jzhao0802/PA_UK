@@ -17,12 +17,12 @@ source("palab_model/palab_model.R")
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = FALSE
+matching = TRUE
 
 # Define dataset and var_config paths
 if (matching){
-  data_file = "data/breast_cancer_matched.csv"
-  # data_file = "data/breast_cancer_matched_clustering.csv"
+  # data_file = "data/breast_cancer_matched.csv"
+  data_file = "data/breast_cancer_matched_clustering.csv"
 }else{
   data_file = "data/breast_cancer.csv"
   # data_file = "data/breast_cancer_clustering.csv"
