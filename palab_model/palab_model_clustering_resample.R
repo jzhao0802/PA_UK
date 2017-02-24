@@ -4,73 +4,6 @@
 #
 # ------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------
-# Hidden helper functions from mlr copied in here
-# ------------------------------------------------------------------------------
-
-getTaskFactorLevels <-  function(task) {
-  cols <- vlapply(task$env$data, is.factor)
-  lapply(task$env$data[cols], levels)
-}
-
-getTaskWeights = function(task) {
-  task$weights
-}
-
-perfsToString <- function(y, sep="=") {
-  stri_paste(stri_paste(names(y), "=", formatC(y, digits=3L), sep=""),
-             collapse=",", sep=" ")
-}
-
-measureAggrName <- function(measure) {
-  stri_paste(measure$id, measure$aggr$id, sep=".")
-}
-
-makeResamplePrediction <- function(instance, preds.test, preds.train) {
-  library(data.table)
-  tenull <- sapply(preds.test, is.null)
-  trnull <- sapply(preds.train, is.null)
-  if (any(tenull)) pr.te <- preds.test[!tenull] else pr.te=preds.test
-  if (any(trnull)) pr.tr <- preds.train[!trnull] else pr.tr=preds.train
-  
-  data <- setDF(rbind(
-    rbindlist(lapply(seq_along(pr.te), function(X) 
-      cbind(pr.te[[X]]$data, iter=X, set="test"))),
-    rbindlist(lapply(seq_along(pr.tr), function(X) 
-      cbind(pr.tr[[X]]$data, iter=X, set="train")))
-  ))
-  
-  if (!any(tenull) && instance$desc$predict %in% c("test", "both")) {
-    p1 <- preds.test[[1L]]
-    pall <- preds.test
-  } else if (!any(trnull) && instance$desc$predict == "train") {
-    p1 <- preds.train[[1L]]
-    pall <- preds.train
-  }
-  
-  makeS3Obj(c("ResamplePrediction", class(p1)),
-            instance=instance,
-            predict.type=p1$predict.type,
-            data=data,
-            threshold=p1$threshold,
-            task.desc=p1$task.desc,
-            time=extractSubList(pall, "time")
-  )
-}
-
-exportMlrOptions=function(level) {
-  .mlr.slave.options=getMlrOptions()
-  parallelExport(".mlr.slave.options", level=level, master=F, show.info=F)
-}
-
-setSlaveOptions = function() {
-  if (getOption("parallelMap.on.slave", FALSE)) {
-    if (exists(".mlr.slave.options", envir = .GlobalEnv)) {
-      opts = get(".mlr.slave.options", envir = .GlobalEnv)
-      Map(setMlrOption, names(opts), opts)
-    }
-  }
-}
 
 # ------------------------------------------------------------------------------
 # Tune outer fold with matching and predefined cv
@@ -86,7 +19,7 @@ tune_outer_fold <- function(learner, task, rin, i, weights, measures,
   # https://github.com/mlr-org/mlr/blob/master/R/resample.R
   
   library(stringi)
-  setSlaveOptions()
+  mlr:::setSlaveOptions()
   if (show_info)
     messagef("[Resample] %s iter %i: ", rin$desc$id, i)
   
@@ -99,6 +32,7 @@ tune_outer_fold <- function(learner, task, rin, i, weights, measures,
   # Downsample train and test data using the user-defined strategy
   if (cluster == "negatives"){
     train_data <- cluster_negatives(train_data, ...)
+    print(train_data$task.desc$size)
     if (cluster_test)
       test_data <- cluster_negatives(test_data, ...)
   }else{
@@ -131,7 +65,7 @@ tune_outer_fold <- function(learner, task, rin, i, weights, measures,
   pred_train = predict(m, train_task, subset = train_i)
   if (!is.na(pred_train$error)) err_msgs[2L] = pred_train$error
   ms_train = performance(task=task, model=m, pred=pred_train, measures=measures)
-  names(ms_train) = vcapply(measures, measureAggrName)
+  names(ms_train) = vcapply(measures, mlr:::measureAggrName)
   
   # Predict test
   pred_test = predict(m, task, subset = test_i)
@@ -146,7 +80,7 @@ tune_outer_fold <- function(learner, task, rin, i, weights, measures,
     idx_test <- which(vlapply(measures, 
                              function(x) "req.test" %in% x$aggr$properties))
     x <- c(ms_train[idx_train], ms_test[idx_test])
-    messagef(perfsToString(x))
+    messagef(mlr:::perfsToString(x))
   }
   
   # Compile results
@@ -182,7 +116,7 @@ merge_outer_models <- function(learner, task, results, measures, rin,
   # Get aggregated predictions
   pred_test = extractSubList(results, "pred_test", simplify = FALSE)
   pred_train = extractSubList(results, "pred_train", simplify = FALSE)
-  pred = makeResamplePrediction(instance = rin, preds.test = pred_test,
+  pred = mlr:::makeResamplePrediction(instance = rin, preds.test = pred_test,
                                 preds.train = pred_train)
   
   # Aggregate measures
@@ -226,9 +160,9 @@ merge_outer_models <- function(learner, task, results, measures, rin,
 # Replicate mlr's nested resampling function WITH MATCHING
 # ------------------------------------------------------------------------------
 
-palab_downsample_clustering_resample = function(learner, task, resampling, measures, 
-                                     weights=NULL, show_info=T, 
-                                     cluster="negatives", ...) {
+downsample_clustering_resample = function(learner, task, resampling, measures, 
+                                          show_info=T, cluster="negatives", 
+                                          cluster_test=F, ...) {
   
   # This is an altered version of the mlr function that does resampling. Here we
   # downsample the negatives by either clustering the positives or negatives.
@@ -240,29 +174,23 @@ palab_downsample_clustering_resample = function(learner, task, resampling, measu
   if (inherits(resampling, "ResampleDesc"))
     resampling = makeResampleInstance(resampling, task = task)
   assertClass(resampling, classes = "ResampleInstance")
-  if (!is.null(weights)) {
-    assertNumeric(weights, len = n, any.missing = FALSE, lower = 0)
-  }
   
   r = resampling$size
   if (n != r)
     stop(stri_paste("Size of data set:", n, "and resampling instance:", r, 
                     "differ!", sep = " "))
-  
+  weights = mlr:::getTaskWeights(task)
   rin = resampling
-  more.args = list(learner=learner, task=task, rin=rin, weights=NULL,
-                   measures=measures, show_info=show_info, ...)
-  if (!is.null(weights)) {
-    more.args$weights = weights
-  } else if (!is.null(getTaskWeights(task))) {
-    more.args$weights = getTaskWeights(task)
-  }
   
-  #parallelLibrary("mlr", master=F, level="mlr.resample", show.inf=F)
-  #exportMlrOptions(level="mlr.resample")
+  more_args = list(learner=learner, task=task, rin=rin, weights=weights, 
+                   measures=measures, show_info=show_info, cluster=cluster, 
+                   cluster_test, ...)
+  
+  parallelLibrary("mlr", master=F, level="mlr.resample", show.info=F)
+  mlr:::exportMlrOptions(level="mlr.resample")
   time1 = Sys.time()
   results = parallelMap(tune_outer_fold, seq_len(rin$desc$iters), 
-                        level = "mlr.resample", more.args=more.args)
+                        level = "mlr.resample", more.args=more_args)
   time2=Sys.time()
   runtime=as.numeric(difftime(time2, time1, units="secs"))
   

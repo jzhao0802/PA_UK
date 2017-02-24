@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#          Nested CV with elastic net penalized logistic regression
+#                           Nested CV with SVM
 #
 # ------------------------------------------------------------------------------
 
@@ -8,8 +8,8 @@ library(mlr)
 library(readr)
 library(parallel)
 library(parallelMap)
+library(ParamHelpers)
 library(ggplot2)
-library(plotmo)
 source("palab_model/palab_model.R")
 
 # ------------------------------------------------------------------------------
@@ -17,12 +17,12 @@ source("palab_model/palab_model.R")
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = TRUE
+matching = FALSE
 
 # Define dataset and var_config paths
 if (matching){
-  # data_file = "data/breast_cancer_matched.csv"
-  data_file = "data/breast_cancer_matched_clustering.csv"
+  data_file = "data/breast_cancer_matched.csv"
+  # data_file = "data/breast_cancer_matched_clustering.csv"
 }else{
   data_file = "data/breast_cancer.csv"
   # data_file = "data/breast_cancer_clustering.csv"
@@ -43,7 +43,7 @@ random_search_iter <- 50L
 set.seed(random_seed, "L'Ecuyer")
 
 # Load breast cancer dataset and var_config
-df <- readr::read_csv(data_file)
+df <- readr::read_csv(data_file)  
 var_config <- readr::read_csv(var_config_file)
 
 # Get the matching information from the df
@@ -65,8 +65,14 @@ target = "Class"
 # Setup modelling in mlR
 # ------------------------------------------------------------------------------
 
+# This version of the script uses the first half of the data as a validation set
+# It then does a single CV (non-nested) on the train set.
+validation <- df[1:100, ]
+train <- df[101:dim(df)[1],]
+merged_df <- rbind(validation, train)
+
 # Setup the classification task in mlR, explicitely define positive class
-dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
+dataset <- makeClassifTask(id="BC", data=merged_df, target=target, positive=1)
 # If we have matching we can use blocking to preserve them through nested cv
 if(matching){
   dataset$blocking <- matches
@@ -79,33 +85,29 @@ if(matching){
 dataset
 get_class_freqs(dataset)
 
-# Do we want glmnet to uses the class weights?
-# pos_class_w <- get_class_freqs(dataset)
-# iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-# dataset$weights <- as.numeric(iw)
+# Make sure we sample according to inverse class frequency 
+pos_class_w <- get_class_freqs(dataset)
+iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
+dataset$weights <- as.numeric(iw)
 
-# Define logistic regression with elasticnet penalty - each feature will be 
-# standardised internally and the returned coefs are scaled back.
-lrn <- makeLearner("classif.glmnet", predict.type="prob", predict.threshold=0.5)
-
-# Find max lambda as suggested here: 
-# https://github.com/mlr-org/mlr/issues/1030#issuecomment-233677172
-tmp_model <- train(lrn, dataset)
-max_lambda <- max(tmp_model$learner.model$lambda)
-
-# Define hyper parameters
-ps <- makeParamSet(
-  # for lasso delete the alpha from the search space and set it (see below)
-  makeNumericParam("alpha", lower=0, upper=1),
-  makeNumericParam("s", lower=0, upper=max_lambda*2, trafo=function(x) 10^x)
+# Define XGboost learner
+lrn <- makeLearner("classif.xgboost", predict.type="prob", 
+                   predict.threshold=0.5)
+lrn$par.vals = list(
+  nrounds = 100,
+  verbose = F,
+  objective = "binary:logistic"
+  # for multiclass use objective = "multi:softmax"
 )
 
-# For Lasso penalty do:
-# lrn <- setHyperPars(lrn, alpha=1)
-
-# ------------------------------------------------------------------------------
-# Setup rest of the nested CV in mlR
-# ------------------------------------------------------------------------------
+# Define hyper parameters
+ps = makeParamSet(
+  makeNumericParam("eta", lower=0.01, upper=0.3),
+  makeIntegerParam("max_depth", lower=2, upper=6),
+  makeIntegerParam("min_child_weight", lower=1, upper=5),
+  makeNumericParam("colsample_bytree", lower=.5, upper=1),
+  makeNumericParam("subsample", lower=.5, upper=1)
+)
 
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
 # tunes the classifier's decision threshold in inner folds but it takes forever
@@ -120,7 +122,8 @@ m4 <- setAggregation(auc, test.sd)
 m_all <- list(pr10, m2, m3, m4)
 
 # Define outer and inner resampling strategies
-outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
+outer <- makeFixedHoldoutInstance(test.inds=c(1:100), 
+                               train.inds=(101:dim(train)[1]), size=dim(df)[1])
 
 # The inner could be "Subsample" if we don't have enough positive samples
 inner <- makeResampleDesc("CV", iters=3, stratify=T)
@@ -135,6 +138,10 @@ if (matching){
 lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
                             show.info=F, measures=m_all)
 
+
+
+
+
 # ------------------------------------------------------------------------------
 # Run training with nested CV
 # ------------------------------------------------------------------------------
@@ -142,8 +149,10 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # Setup parallelization - if you run this on cluster, use at most 2 instead of 
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
-res <- downsample_clustering_resample(lrn_wrap, dataset, outer,cluster="negatives",
-                                      show_info=T, measures=m_all) 
+
+res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
+                extract=getTuneResult, show.info=F, measures=m_all)  
+
 parallelStop()
 
 # ------------------------------------------------------------------------------
@@ -152,7 +161,7 @@ parallelStop()
 
 # Define extra parameters that we want to save in the results
 extra <- list("Matching"=as.character(matching),
-              "NumSamples"=dataset$task.desc$size, 
+              "NumSamples"=dataset$task.desc$size,
               "NumFeatures"=sum(dataset$task.desc$n.feat),
               "ElapsedTime(secs)"=res$runtime, 
               "RandomSeed"=random_seed, 
@@ -200,15 +209,17 @@ plot_pr_curve(res$pred, roc=T)
 # Get tuned models for each outer fold
 o_models <- get_models(res)
 
-# Print betas/coefs at the tuned value of lambda for the first model
-best_lambda <- results$best_params$s[1]
-coef(o_models[[1]], s=best_lambda)
+# Columns that are not the target
+all_cols <- colnames(df)[colnames(df) != target]
 
-# Plot the regularsation paths for all models, note how different the 3 s
-plot_reg_path_glmnet(res, n_feat="all")
+# Get percentage VI table with direction of association as correlation
+get_vi_table(o_models[[1]], dataset)
 
-# If the labels of variables are too crowded change to n_feat=5
-# plot_reg_path_glmnet(res, n_feat=5)
+# Plot variable importance across outer fold moldes, for mean do aggregate=T
+plot_all_rf_vi(res, dataset=dataset, aggregate=F)
+
+# Alternatively here's a simpler plot
+plot_all_rf_vi_simple(res)
 
 # This is how to predict with the first model
 predict(res$models[[1]], dataset)
@@ -225,10 +236,7 @@ lrn_outer_trained <- train(lrn_outer, dataset)
 lrn_outer_model <-getLearnerModel(lrn_outer_trained, more.unwrap=T)
 
 # Plot regularisation path of the averaged model.
-plotmo::plot_glmnet(lrn_outer_model, s=best_mean_params$s, main="Average model")
-
-# Accessing params just like above, note that the mean s is over-regularising
-coef(lrn_outer_model, s=best_mean_params$s)
+plot_rf_vi(lrn_outer_model, title="Average model")
 
 # Plot a PR and ROC curve for this new model
 pred_outer <- predict(lrn_outer_trained, dataset)
@@ -246,7 +254,7 @@ theme_set(theme_minimal(base_size=10))
 # Define performance metrics we want to plot, ppv=precision, tpr=recall
 perf_to_plot <- list(fpr, tpr, ppv, mmce)
 
-# Generate the data for the plots, do aggregate=T if you want the mean
+# Generate the data for the plots
 thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
 
@@ -257,22 +265,14 @@ tuneThreshold(pred=res$pred, measure=pr10)
 # Partial dependence plots
 # ------------------------------------------------------------------------------
 
-# Columns that are not the target
-all_cols <- colnames(df)[colnames(df) != target]
-
-# Plot median of the curve of each patient for 1st outer model and average model
-par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
+# Plot the median of the curve of each patient
+par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
                                               all_cols, fun=median)
 plotPartialDependence(par_dep_data)
 
-# Note only 3 predictors remain which are completely linear and not as above
-par_dep_data2 <- generatePartialDependenceData(lrn_outer_trained, dataset,
-                                              all_cols, fun=median)
-plotPartialDependence(par_dep_data2)
-
 # Plot partial dependence plot for all patients
-# par_dep_data <- generatePartialDependenceData(res$models[[1]], dataset,
-#                                                 all_cols, individual=T)
+# par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
+#                                               all_cols, individual=T)
 # plotPartialDependence(par_dep_data)
 
 # Alternatively if you have many columns use this to plot into a multipage pdf
@@ -289,5 +289,10 @@ plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 # Generate hyper parameter plots for every pair of hyper parameters
 # ------------------------------------------------------------------------------
 
-# Plot a performance metric for two hyper parameters, generates .pdf
-plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder="elasticnet_hypers")
+# Plot a performance metric for each pair of hyper parameter, generates .pdf
+# Visualising more than 2 hyper-params requires partial dependence plots which
+# is slow to calculate. It's quicker if not to plot per each fold: per_fold=F.
+# Also if we have more than 2 params, indiv_pars=T will plot each as a line plot
+# which is a lot qucker.
+plot_hyperpar_pairs(res, ps, "pr10.test.mean", per_fold=F,
+                    output_folder="xgboost_hypers", indiv_pars=T)
