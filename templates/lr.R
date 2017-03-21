@@ -94,9 +94,11 @@ if (matching){
 }
 
 # Define performane metrics
-pr10 <- make_custom_pr_measure(recall_thrs, "pr10")
+pr10 <- make_custom_pr_measure(10, "pr10")
+pr15 <- make_custom_pr_measure(15, "pr15")
+pr20 <- make_custom_pr_measure(20, "pr20")
 # It's always the first in the list that's used to rank hyper-params in tuning.
-m_all <- list(pr10, auc)
+m_all <- list(pr10, pr15, pr20, auc)
 
 # ------------------------------------------------------------------------------
 # Run training with nested CV
@@ -153,7 +155,8 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # ------------------------------------------------------------------------------
 
 # If you don't need the ROC curve just set it to FALSE.
-plot_pr_curve(res$pred, roc=T)
+plot_pr_curve(res$pred)
+plot_roc_curve(res$pred)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -192,7 +195,8 @@ summary(lrn_outer_model)
 
 # Plot a PR and ROC curve for this new model
 pred_outer <- predict(lrn_outer_trained, dataset)
-plot_pr_curve(pred_outer, roc=T)
+plot_pr_curve(pred_outer)
+plot_roc_curve(pred_outer)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance

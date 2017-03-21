@@ -66,11 +66,20 @@ target = "Class"
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
-dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
-# If we have matching we can use blocking to preserve them through nested cv
+
+# Tim catched that if the blocking is not added in the constructor than just
+# by setting it later will not change what's printed for the task. 
 if(matching){
-  dataset$blocking <- matches
-} 
+  dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1, 
+                           blocking = matches)
+}else{
+  dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
+}
+
+# If we have matching we can use blocking to preserve them through nested cv
+# if(matching){
+#   dataset$blocking <- matches
+# } 
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -142,8 +151,8 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # Setup parallelization - if you run this on cluster, use at most 2 instead of 
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
-res <- downsample_clustering_resample(lrn_wrap, dataset, outer,cluster="negatives",
-                                      show_info=T, measures=m_all) 
+res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
+                extract=getTuneResult, show.info=F, measures=m_all)  
 parallelStop()
 
 # ------------------------------------------------------------------------------
@@ -191,7 +200,8 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # ------------------------------------------------------------------------------
 
 # If you don't need the ROC curve just set it to FALSE.
-plot_pr_curve(res$pred, roc=T)
+plot_pr_curve(res$pred)
+plot_roc_curve(res$pred)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -232,7 +242,8 @@ coef(lrn_outer_model, s=best_mean_params$s)
 
 # Plot a PR and ROC curve for this new model
 pred_outer <- predict(lrn_outer_trained, dataset)
-plot_pr_curve(pred_outer, roc=T)
+plot_pr_curve(pred_outer)
+plot_roc_curve(pred_outer)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance

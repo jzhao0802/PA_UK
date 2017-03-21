@@ -4,7 +4,6 @@
 #
 # ------------------------------------------------------------------------------
 
-
 # ------------------------------------------------------------------------------
 # Tune outer fold with matching and predefined cv
 # ------------------------------------------------------------------------------
@@ -32,7 +31,6 @@ tune_outer_fold <- function(learner, task, rin, i, weights, measures,
   # Downsample train and test data using the user-defined strategy
   if (cluster == "negatives"){
     train_data <- cluster_negatives(train_data, ...)
-    print(train_data$task.desc$size)
     if (cluster_test)
       test_data <- cluster_negatives(test_data, ...)
   }else{
@@ -41,9 +39,22 @@ tune_outer_fold <- function(learner, task, rin, i, weights, measures,
       test_data <- cluster_negatives(test_data, ...)
   }
   
+  if (!is.null(weights)){
+    target <- table(getTaskTargets(train_data))
+    class_w <- target/sum(target)
+    iw <- unlist(lapply(getTaskTargets(train_data), function(x) 1/class_w[x]))
+    train_data$weights <- as.numeric(iw)
+    if (cluster_test){
+      target <- table(getTaskTargets(test_data))
+      class_w <- target/sum(target)
+      iw <- unlist(lapply(getTaskTargets(test_data), function(x) 1/class_w[x]))
+      test_data$weights <- as.numeric(iw)
+    }
+  }
+  
   # Tune parameters with nested CV, preserving matching
   err_msgs = c(NA_character_, NA_character_)
-  m = train(learner, task, subset = train_i, weights = weights[train_i])
+  m = train(learner, train_data)
   if (isFailureModel(m))
     err_msgs[1L] = getFailureModelMsg(m)
   
@@ -76,9 +87,9 @@ tune_outer_fold <- function(learner, task, rin, i, weights, measures,
   # Show info
   if (show_info) {
     idx_train <- which(vlapply(measures, 
-                              function(x) "req.train" %in% x$aggr$properties))
+                               function(x) "req.train" %in% x$aggr$properties))
     idx_test <- which(vlapply(measures, 
-                             function(x) "req.test" %in% x$aggr$properties))
+                              function(x) "req.test" %in% x$aggr$properties))
     x <- c(ms_train[idx_train], ms_test[idx_test])
     messagef(mlr:::perfsToString(x))
   }
@@ -117,7 +128,7 @@ merge_outer_models <- function(learner, task, results, measures, rin,
   pred_test = extractSubList(results, "pred_test", simplify = FALSE)
   pred_train = extractSubList(results, "pred_train", simplify = FALSE)
   pred = mlr:::makeResamplePrediction(instance = rin, preds.test = pred_test,
-                                preds.train = pred_train)
+                                      preds.train = pred_train)
   
   # Aggregate measures
   aggr = vnapply(seq_along(measures), function(i) {
@@ -166,7 +177,7 @@ downsample_clustering_resample = function(learner, task, resampling, measures,
   
   # This is an altered version of the mlr function that does resampling. Here we
   # downsample the negatives by either clustering the positives or negatives.
-
+  
   library(checkmate)
   
   n = getTaskSize(task)
@@ -195,6 +206,6 @@ downsample_clustering_resample = function(learner, task, resampling, measures,
   runtime=as.numeric(difftime(time2, time1, units="secs"))
   
   merged_results <- merge_outer_models(learner, task, results, measures, rin, 
-                                        runtime)
+                                       runtime)
   addClasses(merged_results, "ResampleResult")
 }

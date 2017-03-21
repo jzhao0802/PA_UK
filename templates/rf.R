@@ -196,7 +196,8 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # ------------------------------------------------------------------------------
 
 # If you don't need the ROC curve just set it to FALSE.
-plot_pr_curve(res$pred, roc=T)
+plot_pr_curve(res$pred)
+plot_roc_curve(res$pred)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -236,7 +237,8 @@ get_vi_table(lrn_outer_model, dataset)
 
 # Plot a PR and ROC curve for this new model
 pred_outer <- predict(lrn_outer_trained, dataset)
-plot_pr_curve(pred_outer, roc=T)
+plot_pr_curve(pred_outer)
+plot_roc_curve(pred_outer)
 
 # ------------------------------------------------------------------------------
 # Check how varying the threshold of the classifier changes performance

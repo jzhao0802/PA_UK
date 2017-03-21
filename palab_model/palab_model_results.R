@@ -258,10 +258,11 @@ get_paramset_df <- function(grid_ps){
     ParamSet <- c(ParamSet, par$id)
     Type <- c(Type, par$type)
     Length <- c(Length, par$len)
-    Lower <- c(Lower, par$lower)
-    Upper <- c(Upper, par$upper)
-    Value <- c(Value, if (is.null(par$values)) "-" else unlist(par$values))
-    Trafo <- c(Trafo, if (is.null(par$values)) "-" else "Y")
+    Lower <- c(Lower, if (is.null(par$lower)) "-" else unlist(par$lower))
+    Upper <- c(Upper, if (is.null(par$upper)) "-" else unlist(par$upper))
+    vals <- paste(unlist(par$values), collapse=",")
+    Value <- c(Value, if (is.null(par$values)) "-" else vals)
+    Trafo <- c(Trafo, if (is.null(par$trafo)) "-" else "Y")
   }
   data.frame(ParamSet, Type, Length, Lower, Upper, Value, Trafo)
 }

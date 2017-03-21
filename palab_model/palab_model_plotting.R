@@ -7,10 +7,10 @@
 library(dplyr)
 library(mlr)
 library(ggplot2)
-
+library(ROCR)
 
 # ------------------------------------------------------------------------------
-# Plot precision recall and ROC curve
+# Helper functions to calculate, bin, and plot PR and ROC curves
 # ------------------------------------------------------------------------------
 
 get_truth_pred <- function(pred){
@@ -27,34 +27,101 @@ get_truth_pred <- function(pred){
     pos_ix <- truth == positive_class
   }
   truth <- as.integer(pos_ix)
-  results <- list("truth"=truth, "prob"=prob)
-  results
-}
-
-plot_pr_curve <- function(pred, roc=TRUE){
-  library(PRROC)
-  # Get probabilities and truth
-  tb <- get_truth_pred(pred)
   
   # Retain only the predictions on the test set if pred is from nested cv
   if ("set" %in% colnames(as.data.frame(pred))){
     df <- as.data.frame(pred)
-    truth <- tb$truth[df$set=="test"]
-    prob <- tb$prob[df$set=="test"]
-  }else{
-    truth <- tb$truth
-    prob <- tb$prob
+    truth <- truth[df$set=="test"]
+    prob <- prob[df$set=="test"]
   }
   
-  # Plot ROC curve first so it's the 2nd plot once this function is run
-  if (roc){
-    roc <- roc.curve(scores.class0=prob, weights.class0=truth, curve = T)
-    plot(roc)
+  results <- list("truth"=truth, "prob"=prob)
+  return (results)
+}
+
+get_curve <- function(prob, truth, x_metric, y_metric){
+  # Calculates roc or pr curve using the ROCR package. Based on Hui's code. Once
+  # the curve is calculated it bins it if there are more than 1000 curve points,
+  # then returns a curve_df with x, y, thresh columns.
+  aucobj <- ROCR::prediction(prob, truth)
+  perf <- ROCR::performance(aucobj, y_metric, x_metric)
+  x <- perf@x.values[[1]]
+  y <- perf@y.values[[1]]
+  thresh <- perf@alpha.values[[1]]
+  
+  # ignore nans and inf
+  non_nan <- (!is.nan(x) & !is.nan(y) & !is.nan(thresh) & !is.infinite(x) & 
+                !is.infinite(y) & !is.infinite(thresh))
+  x <- x[non_nan]
+  y <- y[non_nan]
+  thresh <- thresh[non_nan]
+  
+  # make df that we return
+  curve_df <- data.frame(x=x, y=y, thresh=thresh)
+  
+  # bin if necessary
+  if (length(x) > 1000){
+    curve_df <- curve_df %>%
+      group_by(x=cut(x, breaks = seq(0, 1, by=0.001))) %>%
+      filter(x == max(x)) %>%
+      filter(y == max(y)) %>%
+      filter(thresh == max(thresh)) %>%
+      arrange(as.numeric(x)) %>%
+      select(x, y, thresh)
   }
   
+  return(curve_df)
+}
+
+auc_curve <- function(curve_df){
+  # Linearly interpolates the x, y points of curve_df and returns the integral
+  f <- approxfun(curve_df$x, curve_df$y)
+  min_x <- min(curve_df$x)
+  max_x <-max(curve_df$x)
+  integrate(f, min_x, max_x, subdivisions=2000)$value
+}
+
+plot_curve <- function(data, xlab, ylab, title){
+  # Plots the ROC and PR curves using ggplot.
+  colnames(data)[3] = "Threshold"
+  p <- ggplot(data, aes(x=x,y=y))
+  p + geom_line(aes(colour=Threshold), size=1) + 
+    scale_colour_gradient(low="red") +
+    xlab(xlab) +
+    ylab(ylab) + 
+    ggtitle(title)
+}
+
+# ------------------------------------------------------------------------------
+# Main functions to plot PR and ROC curve
+# ------------------------------------------------------------------------------
+
+plot_pr_curve <- function(pred){
+  # Get probabilities and truth
+  theme_set(theme_minimal(base_size=10))
+  tp <- get_truth_pred(pred)
+
   # Plot PR curve
-  pr <- pr.curve(scores.class0=prob, weights.class0=truth, curve = T)
-  plot(pr)
+  curve_df <- get_curve(tp$prob, tp$truth, x_metric="rec", y_metric="prec")
+  # pr auc - with linear interpolation - this isn't precise but it's fast
+  pr_auc <- auc_curve(curve_df)
+  # plot curve
+  plot_curve(data=curve_df, xlab="TPR/Sens/Recall", ylab="Precision/PPV",
+             title=paste("Area under PR: ", decimal_rounder(pr_auc, 4)))
+}
+
+plot_roc_curve <- function(pred){
+  # Get probabilities and truth
+  theme_set(theme_minimal(base_size=10))
+  tp <- get_truth_pred(pred)
+  
+  # get binned roc curve df - 1000 x, y points
+  curve_df <- get_curve(tp$prob, tp$truth, x_metric="fpr", y_metric="tpr")
+  # roc auc - with linear interpolation
+  roc_auc <- auc_curve(curve_df)
+  # plot curve
+  plot_curve(data=curve_df, xlab="FPR", ylab="TPR", 
+             title=paste("Area under ROC: ", decimal_rounder(roc_auc, 4)))
 }
 
 # ------------------------------------------------------------------------------

@@ -176,7 +176,7 @@ get_closest_witihin_cluster_points <- function(data, cluster_membership,
 # ------------------------------------------------------------------------------
 # Clustering negatives (majority class)
 # ------------------------------------------------------------------------------
-cluster_negatives <- function(dataset, ratio=1, method="hclust", kmeans_repl=2, 
+cluster_negatives <- function(dataset, ratio=1, method="hclust", kmeans_repl=5, 
                               dist_m="euclidean", agg_m="complete"){
   # This function takes in an binary mlr dataset, clusters the negative samples
   # hierarchically based on the distance measure and agglomeration method. Then
@@ -282,7 +282,8 @@ cluster_negatives <- function(dataset, ratio=1, method="hclust", kmeans_repl=2,
 # ------------------------------------------------------------------------------
 
 cluster_positives <- function(dataset, ratio=1, k, method="hclust", 
-                              dist_m="euclidean", agg_m="complete"){
+                              dist_m="euclidean", agg_m="complete",
+                              kmeans_repl=5){
   # This function clusters the positive (minority) class into k clusters using
   # kmeans or hierarchical clustering. Then it finds the closest negative 
   # samples to the centroids of these clusters. It preserves matching if
@@ -321,7 +322,7 @@ cluster_positives <- function(dataset, ratio=1, k, method="hclust",
     pos_cluster_membership <- do_hclust(pos_data, k=k, dist_m, agg_m)
     pos_centroids <- get_centroids(pos_data, pos_cluster_membership, method=mean)
   }else if (method == "kmeans"){
-    km <- do_kmeans(pos_data, k=k)
+    km <- do_kmeans(pos_data, k=k, repl=kmeans_repl)
     pos_cluster_membership <- unlist(km$cluster_membership)+1
     pos_centroids <- km$centroids
   }
