@@ -138,7 +138,7 @@ plot_perf_curve <- function(pred, bin_num=1000, x_metric="rec", y_metric="prec")
   auc <- auc_curve(curve_df)
   # prepare df that we return
   ggplot_perf_curve(data=curve_df, xlab=x_metric, ylab=y_metric, 
-                    title=paste("AUC: ", decimal_rounder(roc_auc, 4)))
+                    title=paste("AUC: ", decimal_rounder(auc, 4)))
 }
 
 # ------------------------------------------------------------------------------

@@ -16,11 +16,12 @@ plot_reg_path_glmnet <- function(results, n_feat="all"){
   outer_fold_n <- length(results$models)
   num_rows <- ceiling((outer_fold_n)/2)
   par(mfrow=c(num_rows, 2))
+  models <- get_models(results)
   
   for (i in 1:outer_fold_n){
     # Get best lambda and model
     best_lambda <- results$models[[i]]$learner.model$opt.result$x$s
-    model <- getLearnerModel(results$models[[i]], more.unwrap = T)
+    model <- models[[i]]
     title <- paste("Outer fold", as.character(i))
     
     # Plot regularisation path with the best lambda=s chosen by CV

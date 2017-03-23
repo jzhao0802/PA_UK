@@ -10,31 +10,12 @@ library(BBmisc)
 library(ggplot2)
 
 # ------------------------------------------------------------------------------
-# Get path to output csv
-# ------------------------------------------------------------------------------
-
-get_result_csv_path <- function(output_folder){
-  # Get time stamp and make a (Windows safe) file name out of it
-  t <- as.character(Sys.time())
-  t <- gsub(" ", "_", t)
-  t <- gsub(":", "-", t)
-  output_csv <- paste("results_", t, '.csv', sep='')
-  
-  # Check output folder, create it if needed
-  create_output_folder(output_folder)
-  if (output_folder != ""){
-    output_csv <- file.path(output_folder, output_csv)
-  }
-  output_csv
-}
-
-# ------------------------------------------------------------------------------
 # Extract results from tuned nested CV model
 # ------------------------------------------------------------------------------
 
 get_results <- function(results, grid_ps, detailed=F, all_measures=F, 
-                        write_csv=F, output_folder="", extra=NULL, shorten=T, 
-                        decimal=5){
+                        write_csv=F, output_folder="", output_csv="", 
+                        extra=NULL, shorten=T, decimal=5){
   # This function calculates a bunch of summary statistics from a learner that
   # was tuned using nested CV. The level of detail that's returned could be 
   # set with detailed=T and all_measure=T. Also if write_csv=T, all data.frames
@@ -128,7 +109,7 @@ get_results <- function(results, grid_ps, detailed=F, all_measures=F,
   
   # Write results to csv if needed
   if (write_csv){
-    output_csv <- get_result_csv_path(output_folder)
+    output_csv <- get_result_csv_path(output_folder, output_csv)
     write_df <- function(df){
       write.table(as.data.frame(df), output_csv, append=T, sep=',', row.names=F)
       write("", output_csv, append=T, sep=',')
@@ -145,8 +126,8 @@ get_results <- function(results, grid_ps, detailed=F, all_measures=F,
 # ------------------------------------------------------------------------------
 
 get_non_nested_results <- function(results, all_measures=F, write_csv=F, 
-                                   output_folder="", extra=NULL, shorten=T, 
-                                   decimal=5){
+                                   output_folder="", output_csv="", 
+                                   extra=NULL, shorten=T, decimal=5){
   
   # Get info part of results
   info_df <- get_info(results, extra)
@@ -199,7 +180,7 @@ get_non_nested_results <- function(results, all_measures=F, write_csv=F,
   
   # write results to csv if needed
   if (write_csv){
-    output_csv <- get_result_csv_path(output_folder)
+    output_csv <- get_result_csv_path(output_folder, output_csv)
     write_df <- function(df){
       write.table(as.data.frame(df), output_csv, append=T, sep=',', row.names=F)
       write("", output_csv, append=T, sep=',')
@@ -209,6 +190,27 @@ get_non_nested_results <- function(results, all_measures=F, write_csv=F,
   
   #return results object
   to_return
+}
+
+# ------------------------------------------------------------------------------
+# Get path to output csv
+# ------------------------------------------------------------------------------
+
+get_result_csv_path <- function(output_folder, output_csv){
+  # Get time stamp and make a (Windows safe) file name out of it
+  if (output_csv == ""){
+    t <- as.character(Sys.time())
+    t <- gsub(" ", "_", t)
+    t <- gsub(":", "-", t)
+    output_csv <- paste("results_", t, '.csv', sep='')
+  }
+  
+  # Check output folder, create it if needed
+  create_output_folder(output_folder)
+  if (output_folder != ""){
+    output_csv <- file.path(output_folder, output_csv)
+  }
+  output_csv
 }
 
 # ------------------------------------------------------------------------------
@@ -341,7 +343,15 @@ get_opt_paths <- function(result){
 }
 
 get_models <- function(results){
-  lapply(results$models, function(x) getLearnerModel(x, more.unwrap=T))
+  get_model <- function(model){
+    model <- getLearnerModel(model, more.unwrap=T)
+    # if we wrapped the model twice we need to return the inner one
+    if (is(model, "WrappedModel")){
+      model <- model$next.model$learner.model
+    }
+    model
+  }
+  lapply(results$models, get_model)
 }
 
 get_best_mean_param <- function(results, int=F){

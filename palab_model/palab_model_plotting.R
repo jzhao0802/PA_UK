@@ -90,7 +90,7 @@ plot_hyperpar_pairs <- function(results, ps, perf_metric, per_fold=T,
           # More than 2 params, plot them in pairs as partial dependece heatmaps
           plt <- plotHyperParsEffect(df, x=axes[1], y =axes[2], z=perf_metric,
                                      plot.type="heatmap", show.experiments=T,
-                                     partial.dep.learn="regr.randomForest")  
+                                     partial.dep.learn="regr.earth")  
         }
       # WE only have 2 params, no par.dep, plot them as interpolated heatmap
       }else{
