@@ -100,13 +100,18 @@ lrn$par.vals = list(
   # for multiclass use objective = "multi:softmax"
 )
 
+# Wrap our learner so it will randomly downsample the majority class
+lrn <- makeUndersampleWrapper(lrn)
+
 # Define hyper parameters
 ps = makeParamSet(
   makeNumericParam("eta", lower=0.01, upper=0.3),
   makeIntegerParam("max_depth", lower=2, upper=6),
   makeIntegerParam("min_child_weight", lower=1, upper=5),
   makeNumericParam("colsample_bytree", lower=.5, upper=1),
-  makeNumericParam("subsample", lower=.5, upper=1)
+  makeNumericParam("subsample", lower=.5, upper=1),
+  # add downsampling ratio to the hyper-param grid
+  makeNumericParam("usw.rate", lower=.5, upper=1)
 )
 
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
@@ -198,6 +203,12 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # If you don't need the ROC curve just set it to FALSE.
 plot_pr_curve(res$pred)
 plot_roc_curve(res$pred)
+
+# Plot any performance curve - we plot the inverse roc in this example
+plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
+
+# Get a summary of any perf curve as a table - here we get 20 points of the PR
+binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions

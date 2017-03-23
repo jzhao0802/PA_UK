@@ -102,11 +102,16 @@ lrn <- makeLearner("classif.glmnet", predict.type="prob", predict.threshold=0.5)
 tmp_model <- train(lrn, dataset)
 max_lambda <- max(tmp_model$learner.model$lambda)
 
+# Wrap our learner so it will randomly downsample the majority class
+lrn <- makeUndersampleWrapper(lrn)
+
 # Define hyper parameters
 ps <- makeParamSet(
   # for lasso delete the alpha from the search space and set it (see below)
   makeNumericParam("alpha", lower=0, upper=1),
-  makeNumericParam("s", lower=0, upper=max_lambda*2, trafo=function(x) 10^x)
+  makeNumericParam("s", lower=0, upper=max_lambda*2, trafo=function(x) 10^x),
+  # add downsampling ratio to the hyper-param grid
+  makeNumericParam("usw.rate", lower=.5, upper=1)
 )
 
 # For Lasso penalty do:
@@ -169,7 +174,7 @@ extra <- list("Matching"=as.character(matching),
               "IterationsPerFold"=random_search_iter)
 
 # Get summary of results with main stats, and best parameters
-results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
+results2 <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
 
 # Get detailed results
 # results <- get_results(res, grid_ps=ps, extra=extra, detailed=T)
@@ -202,6 +207,12 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # If you don't need the ROC curve just set it to FALSE.
 plot_pr_curve(res$pred)
 plot_roc_curve(res$pred)
+
+# Plot any performance curve - we plot the inverse roc in this example
+plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
+
+# Get a summary of any perf curve as a table - here we get 20 points of the PR
+binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions

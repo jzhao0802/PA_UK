@@ -91,6 +91,9 @@ lrn <- makeLearner("classif.ranger", predict.type="prob", predict.threshold=0.5)
 # Cheaper than OOB/permutation estimation of feature importance
 lrn <- setHyperPars(lrn, importance="impurity")
 
+# Wrap our learner so it will randomly downsample the majority class
+lrn <- makeUndersampleWrapper(lrn)
+
 # Define range of mtry we will search over
 features_n <- sum(dataset$task.desc$n.feat) 
 mtry_default <- round(sqrt(features_n))
@@ -104,7 +107,9 @@ ps <- makeParamSet(
   makeIntegerParam("num.trees", lower=100L, upper=2000L),
   makeIntegerParam("mtry", lower=mtry_lower, upper=mtry_upper),
   # this depends on the dataset and the size of the positive class
-  makeIntegerParam("min.node.size", lower=100, upper=300)
+  makeIntegerParam("min.node.size", lower=100, upper=300),
+  # add downsampling ratio to the hyper-param grid
+  makeNumericParam("usw.rate", lower=.5, upper=1)
 )
 
 # ------------------------------------------------------------------------------
@@ -198,6 +203,12 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # If you don't need the ROC curve just set it to FALSE.
 plot_pr_curve(res$pred)
 plot_roc_curve(res$pred)
+
+# Plot any performance curve - we plot the inverse roc in this example
+plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
+
+# Get a summary of any perf curve as a table - here we get 20 points of the PR
+binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions

@@ -65,8 +65,8 @@ bin_curve <- function(curve_df, bin_num){
     group_by(x_binned=cut(x, breaks = seq(0, 1, by=1/bin_num))) %>%
     filter(x == max(x)) %>%
     filter(y == max(y)) %>%
-    filter(thresh == max(thresh)) %>%
-    arrange(as.numeric(x_binned))
+    arrange(as.numeric(x_binned)) %>%
+    select(x, y, thresh, x_binned)
 }
 
 auc_curve <- function(curve_df){
@@ -155,7 +155,7 @@ binned_perf_curve <- function(pred, bin_num=20, x_metric="rec", y_metric="prec")
   auc <- auc_curve(curve_df)
   # prepare df that we return
   curve_df <- as.data.frame(curve_df[,c("x_binned", "y", "thresh")])
-  colnames(curve_df) <- c(paste(x_metric, "_binned"), y_metric, "thresh")
+  colnames(curve_df) <- c(paste(x_metric, "_binned", sep=""), y_metric, "thresh")
   return(list(curve=curve_df, auc=auc))
 }
 

@@ -81,6 +81,9 @@ get_class_freqs(dataset)
 # Define decision tree, using the rpart package
 lrn <- makeLearner("classif.rpart", predict.type="prob", predict.threshold=0.5)
 
+# Wrap our learner so it will randomly downsample the majority class
+lrn <- makeUndersampleWrapper(lrn)
+
 # Make sure we sample according to inverse class frequency 
 pos_class_w <- get_class_freqs(dataset)
 iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
@@ -89,7 +92,9 @@ dataset$weights <- as.numeric(iw)
 ps <- makeParamSet(
   # this depends on the dataset and the size of the positive class
   makeNumericParam("minsplit", lower=10L, upper=100L, trafo=round),
-  makeNumericParam("maxdepth", lower=2, upper=10, trafo=round)
+  makeNumericParam("maxdepth", lower=2, upper=10, trafo=round),
+  # add downsampling ratio to the hyper-param grid
+  makeNumericParam("usw.rate", lower=.5, upper=1)
 )
 
 # ------------------------------------------------------------------------------
@@ -183,6 +188,12 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 
 plot_pr_curve(res$pred)
 plot_roc_curve(res$pred)
+
+# Plot any performance curve - we plot the inverse roc in this example
+plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
+
+# Get a summary of any perf curve as a table - here we get 20 points of the PR
+binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and plot their variable importances

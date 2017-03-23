@@ -158,6 +158,12 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 plot_pr_curve(res$pred)
 plot_roc_curve(res$pred)
 
+# Plot any performance curve - we plot the inverse roc in this example
+plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
+
+# Get a summary of any perf curve as a table - here we get 20 points of the PR
+binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
+
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
 # ------------------------------------------------------------------------------

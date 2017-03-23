@@ -64,7 +64,7 @@ get_results <- function(results, grid_ps, detailed=F, all_measures=F,
   o_train$iter <- NULL
   o_test <- results$measures.test
   o_test$iter <- NULL
-  i_test <- as.data.frame(t(extractSubList(results$extract, "y")))
+  i_test <- as.data.frame(t(BBmisc::extractSubList(results$extract, "y")))
   
   # Unify the columns
   colnames(o_train) <- colnames(i_test)

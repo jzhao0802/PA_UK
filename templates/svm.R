@@ -82,10 +82,15 @@ get_class_freqs(dataset)
 lrn <- makeLearner("classif.ksvm", predict.type="prob", predict.threshold=0.5, 
                    par.vals = list(kernel = "rbfdot"))
 
+# Wrap our learner so it will randomly downsample the majority class
+lrn <- makeUndersampleWrapper(lrn)
+
 # Define hyper parameters
 ps <- makeParamSet(
   makeNumericParam("C", lower = -5, upper = 5, trafo = function(x) 2^x),
-  makeNumericParam("sigma", lower = -5, upper = 5, trafo = function(x) 2^x)
+  makeNumericParam("sigma", lower = -5, upper = 5, trafo = function(x) 2^x),
+  # add downsampling ratio to the hyper-param grid
+  makeNumericParam("usw.rate", lower=.5, upper=1)
 )
 
 # Define SVM with polynomial kernel. 
@@ -186,6 +191,12 @@ o_test_preds <- get_outer_preds(res, ids=ids)
 # If you don't need the ROC curve just set it to FALSE.
 plot_pr_curve(res$pred)
 plot_roc_curve(res$pred)
+
+# Plot any performance curve - we plot the inverse roc in this example
+plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
+
+# Get a summary of any perf curve as a table - here we get 20 points of the PR
+binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
