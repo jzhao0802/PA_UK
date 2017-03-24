@@ -33,6 +33,9 @@ random_seed <- 123
 recall_thrs <- 10
 random_search_iter <- 50L
 
+output_folder = "dt"
+create_output_folder(output_folder)
+
 # ------------------------------------------------------------------------------
 # Load data
 # ------------------------------------------------------------------------------
@@ -85,9 +88,9 @@ lrn <- makeLearner("classif.rpart", predict.type="prob", predict.threshold=0.5)
 lrn <- makeUndersampleWrapper(lrn)
 
 # Make sure we sample according to inverse class frequency 
-pos_class_w <- get_class_freqs(dataset)
-iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-dataset$weights <- as.numeric(iw)
+target_vector = getTaskTargets(dataset)
+target_tab = as.numeric(table(target_vector))
+iw = 1/target_tab[target_vector]
 
 ps <- makeParamSet(
   # this depends on the dataset and the size of the positive class
@@ -137,10 +140,13 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
-res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
+res <- resample(lrn_wrap, dataset, resampling=outer, models=T, weights=iw,
                 extract=getTuneResult, show.info=F, measures=m_all)  
 
 parallelStop()
+
+# Save results, models and everything as one .rds
+readr::write_rds(res, file.path(output_folder, "all_results.rds"))
 
 # ------------------------------------------------------------------------------
 # Get results summary and all tried parameter combinations
@@ -155,22 +161,20 @@ extra <- list("Matching"=as.character(matching),
               "Recall"=recall_thrs, 
               "IterationsPerFold"=random_search_iter)
 
-# Get summary of results with main stats, and best parameters
-results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
+# Save all these results into a csv. If output_csv="", current timestamp is used
+results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, write_csv=T, 
+                       output_folder=output_folder, output_csv="results.csv")
 
-# Get detailed results
-# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T)
+# Get detailed results, with more decimal places
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, decimal=10)
 
-# Get detailed results with the actual tables
-# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
+# Get detailed results with the all the available metric tables
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T,
 #                        all_measures=T)
-
-# Save all these results into a csv
-# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
-#                        all_measures=T, write_csv=T)
 
 # For each outer fold show all parameter combinations with their perf metric
 opt_paths <- get_opt_paths(res)
+readr::write_csv(opt_paths, file.path(output_folder, "opt_paths.csv"))
 
 # ------------------------------------------------------------------------------
 # Get predictions
@@ -193,7 +197,8 @@ plot_roc_curve(res$pred)
 plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
 
 # Get a summary of any perf curve as a table - here we get 20 points of the PR
-binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
+pr <- binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
+readr::write_csv(pr$curve, file.path(output_folder, "binned_pr.csv"))
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and plot their variable importances
@@ -259,10 +264,16 @@ theme_set(theme_minimal(base_size=10))
 # If you like the default grey theme, then
 # theme_set(theme_gray(base_size=10))
 
-# Define performance metrics we want to plot, ppv=precision, tpr=recall
-perf_to_plot <- list(fpr, tpr, ppv, mmce)
+# Let's give 5 times the weight to FN compared to FP, rows=truth, cols=pred
+costs = matrix(c(0, 5, 1, 0), 2)
+colnames(costs) = rownames(costs) = getTaskClassLevels(dataset)
+cost_measure = makeCostMeasure(id="cost_measure", name="5FN=1FP", costs=costs, 
+                               best=0, worst=5)
 
-# Generate the data for the plots
+# Define performance metrics we want to plot, ppv=precision, tpr=recall
+perf_to_plot <- list(fpr, tpr, ppv, cost_measure)
+
+# Generate the data for the plots, do aggregate=T if you want the mean
 thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
 
@@ -301,4 +312,5 @@ plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 # ------------------------------------------------------------------------------
 
 # Plot a performance metric for two hyper parameters, generates .pdf
-plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder="dt_hypers")
+plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder=output_folder, 
+                    indiv_pars=T)

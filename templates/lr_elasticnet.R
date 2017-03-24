@@ -70,20 +70,17 @@ target = "Class"
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
-
-# Tim catched that if the blocking is not added in the constructor than just
-# by setting it later will not change what's printed for the task. 
 if(matching){
   dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1, 
-                           blocking = matches)
+                           blocking=matches)
 }else{
   dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
 }
 
 # If we have matching we can use blocking to preserve them through nested cv
 # if(matching){
-#   dataset$blocking <- matches
 # } 
+#   dataset$blocking <- matches
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -93,9 +90,9 @@ dataset
 get_class_freqs(dataset)
 
 # Do we want glmnet to uses the class weights?
-# pos_class_w <- get_class_freqs(dataset)
-# iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-# dataset$weights <- as.numeric(iw)
+target_vector = getTaskTargets(dataset)
+target_tab = as.numeric(table(target_vector))
+iw = 1/target_tab[target_vector]
 
 # Define logistic regression with elasticnet penalty - each feature will be 
 # standardised internally and the returned coefs are scaled back.
@@ -160,7 +157,7 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # Setup parallelization - if you run this on cluster, use at most 2 instead of 
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
-res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
+res <- resample(lrn_wrap, dataset, resampling=outer, models=T, weights=iw,
                 extract=getTuneResult, show.info=F, measures=m_all)  
 parallelStop()
 

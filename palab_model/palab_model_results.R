@@ -293,9 +293,9 @@ get_summary_table <- function(cols, fold_colnames, stats, measures_n, decimal){
   rownames(summary) <- NULL
   summary <- as.data.frame(summary)
   summary$Measure <- measures
-  summary$Statistic <- out
+  summary$Data <- out
   # Reorder columns
-  summary <- summary[,c("Measure", "Statistic", "Mean", "Std", fold_colnames)]
+  summary <- summary[,c("Measure", "Data", "Mean", "Std", fold_colnames)]
   # Order by Measure
   summary <- BBmisc::sortByCol(summary, "Measure")
   # Convert all columns to non-list types so we can write it out

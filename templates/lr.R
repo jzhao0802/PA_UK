@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#                   Nested CV with logistic regression
+#                   Simple CV with logistic regression
 #
 # ------------------------------------------------------------------------------
 
@@ -31,6 +31,10 @@ var_config_file = "data/breast_cancer_var_config.csv"
 # Important variables that will make it to the result file
 random_seed <- 123
 recall_thrs <- 10
+
+# Define output folder and create it - if it doesn't exist
+output_folder = "lr"
+create_output_folder(output_folder)
 
 # ------------------------------------------------------------------------------
 # Load data
@@ -64,11 +68,12 @@ target = "Class"
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
-dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
-# If we have matching we can use blocking to preserve them through nested cv
 if(matching){
-  dataset$blocking <- matches
-} 
+  dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1, 
+                             blocking=matches)
+}else{
+  dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
+}
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -81,9 +86,9 @@ get_class_freqs(dataset)
 lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
 
 # Do we want glmnet to uses the class weights?
-# pos_class_w <- get_class_freqs(dataset)
-# iw <- unlist(lapply(getTaskTargets(dataset), function(x) 1/pos_class_w[x]))
-# dataset$weights <- as.numeric(iw)
+target_vector = getTaskTargets(dataset)
+target_tab = as.numeric(table(target_vector))
+iw = 1/target_tab[target_vector]
 
 # Define outer resampling strategies: if matched, use ncv
 outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
@@ -109,9 +114,12 @@ m_all <- list(pr10, pr15, pr20, auc)
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
 
 res <- resample(lrn, dataset, resampling=outer, models=T, show.info=F, 
-                measures=m_all)
+                weights=iw, measures=m_all)
 
 parallelStop()
+
+# Save results, models and everything as one .rds
+readr::write_rds(res, file.path(output_folder, "all_results.rds"))
 
 # ------------------------------------------------------------------------------
 # Get results summary and all tried parameter combinations
@@ -126,19 +134,9 @@ extra <- list("Matching"=as.character(matching),
               "RandomSeed"=random_seed, 
               "Recall"=recall_thrs)
 
-# Get summary of results with main stats, and best parameters
-results <- get_non_nested_results(res, extra=extra, decimal=5)
-
-# Get detailed results
-# results <- get_non_nested_results(res, extra=extra, detailed=T)
-
-# Get detailed results with the actual tables
-# results <- get_non_nested_results(res, extra=extra, detailed=T, 
-#                                   all_measures=T)
-
-# Save all these results into a csv
-# results <- get_non_nested_results(res, extra=extra, detailed=T, 
-#                                   all_measures=T, write_csv=T)
+# Save all these results into a csv. If output_csv="", current timestamp is used
+results <- get_non_nested_results(res, extra=extra, write_csv=T,
+                       output_folder=output_folder, output_csv="results.csv")
 
 # ------------------------------------------------------------------------------
 # Get predictions
@@ -162,7 +160,8 @@ plot_roc_curve(res$pred)
 plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
 
 # Get a summary of any perf curve as a table - here we get 20 points of the PR
-binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
+pr <- binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
+readr::write_csv(pr$curve, file.path(output_folder, "binned_pr.csv"))
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -213,10 +212,16 @@ theme_set(theme_minimal(base_size=10))
 # If you like the default grey theme, then
 # theme_set(theme_gray(base_size=10))
 
-# Define performance metrics we want to plot, ppv=precision, tpr=recall
-perf_to_plot <- list(fpr, tpr, ppv, mmce)
+# Let's give 5 times the weight to FN compared to FP, rows=truth, cols=pred
+costs = matrix(c(0, 5, 1, 0), 2)
+colnames(costs) = rownames(costs) = getTaskClassLevels(dataset)
+cost_measure = makeCostMeasure(id="cost_measure", name="5FN=1FP", costs=costs, 
+                               best=0, worst=5)
 
-# Generate the data for the plots
+# Define performance metrics we want to plot, ppv=precision, tpr=recall
+perf_to_plot <- list(fpr, tpr, ppv, cost_measure)
+
+# Generate the data for the plots, do aggregate=T if you want the mean
 thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
 plotThreshVsPerf(thr_perf)
 

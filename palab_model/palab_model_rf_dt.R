@@ -47,9 +47,10 @@ plot_all_rf_vi <- function(results, decimal=2, aggregate=F, dataset=NULL){
   vis <- c()
   iters <- c()
   vars <- c()
+  models = get_models(results)
   
   for (i in 1:outer_fold_n){
-    model <- getLearnerModel(results$models[[i]], more.unwrap = T)
+    model <- models[[i]]
     
     if (inherits(model, "xgb.Booster")){
       # extracting VI from XGBoost
@@ -108,9 +109,10 @@ plot_all_rf_vi_simple <- function(results){
   num_rows <- ceiling((outer_fold_n)/2)
   par(mfrow=c(num_rows, 2))
   par(mar=c(5.1,10.1,4.1,2.1))
+  models = get_models(results)
   
   for (i in 1:outer_fold_n){
-    model <- getLearnerModel(results$models[[i]], more.unwrap = T)
+    model <- models[[i]]
     title <- paste("Outer fold", as.character(i))
     plot_rf_vi(model, title, subplot=TRUE)
   }

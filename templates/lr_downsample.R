@@ -1,6 +1,6 @@
 # ------------------------------------------------------------------------------
 #
-#                           Nested CV with SVM
+#     Nested CV with logistic regression and downsampling as hyperparam
 #
 # ------------------------------------------------------------------------------
 
@@ -8,7 +8,6 @@ library(mlr)
 library(readr)
 library(parallel)
 library(parallelMap)
-library(ParamHelpers)
 library(ggplot2)
 source("palab_model/palab_model.R")
 
@@ -17,7 +16,7 @@ source("palab_model/palab_model.R")
 # ------------------------------------------------------------------------------
 
 # Matching or no matching
-matching = TRUE
+matching = FALSE
 
 # Define dataset and var_config paths
 if (matching){
@@ -35,7 +34,7 @@ recall_thrs <- 10
 random_search_iter <- 50L
 
 # Define output folder and create it - if it doesn't exist
-output_folder = "xgboost"
+output_folder = "lr"
 create_output_folder(output_folder)
 
 # ------------------------------------------------------------------------------
@@ -77,7 +76,6 @@ if(matching){
   dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
 }
 
-
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
 
@@ -85,48 +83,38 @@ if(matching){
 dataset
 get_class_freqs(dataset)
 
-# Make sure we sample according to inverse class frequency 
-target_vector = getTaskTargets(dataset)
-target_tab = as.numeric(table(target_vector))
-iw = 1/target_tab[target_vector]
-
-# Define XGboost learner
-lrn <- makeLearner("classif.xgboost", predict.type="prob", 
-                   predict.threshold=0.5)
-lrn$par.vals = list(
-  nrounds = 100,
-  verbose = F,
-  objective = "binary:logistic"
-  # for multiclass use objective = "multi:softmax"
-)
+# Define logistic regression with elasticnet penalty
+lrn <- makeLearner("classif.logreg", predict.type="prob", predict.threshold=0.5)
 
 # Wrap our learner so it will randomly downsample the majority class
 lrn <- makeUndersampleWrapper(lrn)
 
+# Do we want glmnet to uses the class weights?
+target_vector = getTaskTargets(dataset)
+target_tab = as.numeric(table(target_vector))
+iw = 1/target_tab[target_vector]
+
 # Define hyper parameters
-ps = makeParamSet(
-  makeNumericParam("eta", lower=0.01, upper=0.3),
-  makeIntegerParam("max_depth", lower=2, upper=6),
-  makeIntegerParam("min_child_weight", lower=1, upper=5),
-  makeNumericParam("colsample_bytree", lower=.5, upper=1),
-  makeNumericParam("subsample", lower=.5, upper=1),
+ps <- makeParamSet(
   # add downsampling ratio to the hyper-param grid
   makeNumericParam("usw.rate", lower=.5, upper=1)
 )
 
+# ------------------------------------------------------------------------------
+# Setup rest of the nested CV in mlR
+# ------------------------------------------------------------------------------
 # Define random grid search with 100 interation per outer fold. Tune.threshold=T
 # tunes the classifier's decision threshold in inner folds but it takes forever
 ctrl <- makeTuneControlRandom(maxit=random_search_iter, tune.threshold=F)
 
 # Define performane metrics
-pr10 <- make_custom_pr_measure(recall_thrs, "pr10")
-m2 <- auc
-m3 <- setAggregation(pr10, test.sd)
-m4 <- setAggregation(auc, test.sd)
+pr10 <- make_custom_pr_measure(10, "pr10")
+pr15 <- make_custom_pr_measure(15, "pr15")
+pr20 <- make_custom_pr_measure(20, "pr20")
 # It's always the first in the list that's used to rank hyper-params in tuning.
-m_all <- list(pr10, m2, m3, m4)
+m_all <- list(pr10, pr15, pr20, auc)
 
-# Define outer and inner resampling strategies
+# Define outer resampling strategies: if matched, use ncv
 outer <- makeResampleDesc("CV", iters=3, stratify=T, predict = "both")
 
 # The inner could be "Subsample" if we don't have enough positive samples
@@ -149,27 +137,26 @@ lrn_wrap <- makeTuneWrapper(lrn, resampling=inner, par.set=ps, control=ctrl,
 # Setup parallelization - if you run this on cluster, use at most 2 instead of 
 # detectCores() so you don't take up all CPU resources on the server.
 parallelStartSocket(detectCores(), level="mlr.tuneParams")
-
 res <- resample(lrn_wrap, dataset, resampling=outer, models=T, weights=iw,
                 extract=getTuneResult, show.info=F, measures=m_all)  
-
 parallelStop()
 
 # Save results, models and everything as one .rds
 readr::write_rds(res, file.path(output_folder, "all_results.rds"))
 
+
 # ------------------------------------------------------------------------------
 # Get results summary and all tried parameter combinations
 # ------------------------------------------------------------------------------
 
+# Get summary of results with main stats, and best parameters
 # Define extra parameters that we want to save in the results
 extra <- list("Matching"=as.character(matching),
-              "NumSamples"=dataset$task.desc$size,
+              "NumSamples"=dataset$task.desc$size, 
               "NumFeatures"=sum(dataset$task.desc$n.feat),
               "ElapsedTime(secs)"=res$runtime, 
               "RandomSeed"=random_seed, 
-              "Recall"=recall_thrs, 
-              "IterationsPerFold"=random_search_iter)
+              "Recall"=recall_thrs)
 
 # Save all these results into a csv. If output_csv="", current timestamp is used
 results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, write_csv=T, 
@@ -218,17 +205,14 @@ readr::write_csv(pr$curve, file.path(output_folder, "binned_pr.csv"))
 # Get tuned models for each outer fold
 o_models <- get_models(res)
 
-# Columns that are not the target
-all_cols <- colnames(df)[colnames(df) != target]
+# Print model output for the first outer fold model
+summary(o_models[[1]])
 
-# Get percentage VI table with direction of association as correlation
-get_vi_table(o_models[[1]], dataset)
+# Print odds ratios and CIs
+get_odds_ratios(o_models[[1]])
 
-# Plot variable importance across outer fold moldes, for mean do aggregate=T
-plot_all_rf_vi(res, dataset=dataset, aggregate=F)
-
-# Alternatively here's a simpler plot
-plot_all_rf_vi_simple(res)
+# Plot model (residuals, fitted, leverage)
+plot(o_models[[1]])
 
 # This is how to predict with the first model
 predict(res$models[[1]], dataset)
@@ -245,7 +229,10 @@ lrn_outer_trained <- train(lrn_outer, dataset)
 lrn_outer_model <-getLearnerModel(lrn_outer_trained, more.unwrap=T)
 
 # Plot regularisation path of the averaged model.
-plot_rf_vi(lrn_outer_model, title="Average model")
+plot(lrn_outer_model)
+
+# Accessing params just like above
+summary(lrn_outer_model)
 
 # Plot a PR and ROC curve for this new model
 pred_outer <- predict(lrn_outer_trained, dataset)
@@ -281,6 +268,9 @@ tuneThreshold(pred=res$pred, measure=pr10)
 # Partial dependence plots
 # ------------------------------------------------------------------------------
 
+# Columns that are not the target
+all_cols <- colnames(df)[colnames(df) != target]
+
 # Plot the median of the curve of each patient
 par_dep_data <- generatePartialDependenceData(lrn_outer_trained, dataset,
                                               all_cols, fun=median)
@@ -298,17 +288,15 @@ plotPartialDependence(par_dep_data)
 # Fit linear model to each plot and return the beta, i.e. slope
 get_par_dep_plot_slopes(par_dep_data, decimal=5)
 
-# Plot them to easily see the influence of each variable, p-vals are on the bars
+# Plot them to easily see the influence of each variable
 plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 
 # ------------------------------------------------------------------------------
 # Generate hyper parameter plots for every pair of hyper parameters
 # ------------------------------------------------------------------------------
 
-# Plot a performance metric for each pair of hyper parameter, generates .pdf
-# Visualising more than 2 hyper-params requires partial dependence plots which
-# is slow to calculate. It's quicker if not to plot per each fold: per_fold=F.
-# Also if we have more than 2 params, indiv_pars=T will plot each as a line plot
-# which is a lot qucker.
+# Plot a performance metric for two hyper parameters
+data = generateHyperParsEffectData(res)
+plotHyperParsEffect(data, x="usw.rate", y="pr10.test.mean", plot.type="line")
 plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder=output_folder, 
                     indiv_pars=T)

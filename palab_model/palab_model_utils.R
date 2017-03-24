@@ -133,7 +133,11 @@ create_output_folder <- function(output_folder){
   if (output_folder == ""){
     output_folder = getwd()
   }else{
-    output_folder = file.path(getwd(), output_folder)
+    # if not absolute path add working dir to it
+    if (!grepl(":/", output_folder)){
+      output_folder = file.path(getwd(), output_folder)
+    }
+    # make the folder if it doesn't exist
     if (!file.exists(output_folder)){
       dir.create(output_folder)
     }

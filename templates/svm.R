@@ -33,6 +33,10 @@ random_seed <- 123
 recall_thrs <- 10
 random_search_iter <- 50L
 
+# Define output folder and create it - if it doesn't exist
+output_folder = "svm"
+create_output_folder(output_folder)
+
 # ------------------------------------------------------------------------------
 # Load data
 # ------------------------------------------------------------------------------
@@ -65,11 +69,12 @@ target = "Class"
 # ------------------------------------------------------------------------------
 
 # Setup the classification task in mlR, explicitely define positive class
-dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
-# If we have matching we can use blocking to preserve them through nested cv
 if(matching){
-  dataset$blocking <- matches
-} 
+  dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1, 
+                             blocking=matches)
+}else{
+  dataset <- makeClassifTask(id="BC", data=df, target=target, positive=1)
+}
 
 # Downsample number of observations to 50%, preserving the class imbalance
 # dataset <- downsample(dataset, perc = .5, stratify=T)
@@ -144,6 +149,9 @@ res <- resample(lrn_wrap, dataset, resampling=outer, models=T,
 
 parallelStop()
 
+# Save results, models and everything as one .rds
+readr::write_rds(res, file.path(output_folder, "all_results.rds"))
+
 # ------------------------------------------------------------------------------
 # Get results summary and all tried parameter combinations
 # ------------------------------------------------------------------------------
@@ -157,22 +165,20 @@ extra <- list("Matching"=as.character(matching),
               "Recall"=recall_thrs, 
               "IterationsPerFold"=random_search_iter)
 
-# Get summary of results with main stats, and best parameters
-results <- get_results(res, grid_ps=ps, extra=extra, decimal=5)
+# Save all these results into a csv. If output_csv="", current timestamp is used
+results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, write_csv=T, 
+                       output_folder=output_folder, output_csv="results.csv")
 
-# Get detailed results
-# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T)
+# Get detailed results, with more decimal places
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, decimal=10)
 
-# Get detailed results with the actual tables
-# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
+# Get detailed results with the all the available metric tables
+# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T,
 #                        all_measures=T)
-
-# Save all these results into a csv
-# results <- get_results(res, grid_ps=ps, extra=extra, detailed=T, 
-#                        all_measures=T, write_csv=T)
 
 # For each outer fold show all parameter combinations with their perf metric
 opt_paths <- get_opt_paths(res)
+readr::write_csv(opt_paths, file.path(output_folder, "opt_paths.csv"))
 
 # ------------------------------------------------------------------------------
 # Get predictions
@@ -196,7 +202,8 @@ plot_roc_curve(res$pred)
 plot_perf_curve(res$pred, x_metric="tpr", y_metric="fpr", bin_num=1000)
 
 # Get a summary of any perf curve as a table - here we get 20 points of the PR
-binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
+pr <- binned_perf_curve(res$pred, x_metric="rec", y_metric="prec", bin_num=20)
+readr::write_csv(pr$curve, file.path(output_folder, "binned_pr.csv"))
 
 # ------------------------------------------------------------------------------
 # Get models from outer folds and their params and predictions
@@ -243,8 +250,14 @@ theme_set(theme_minimal(base_size=10))
 # If you like the default grey theme, then
 # theme_set(theme_gray(base_size=10))
 
+# Let's give 5 times the weight to FN compared to FP, rows=truth, cols=pred
+costs = matrix(c(0, 5, 1, 0), 2)
+colnames(costs) = rownames(costs) = getTaskClassLevels(dataset)
+cost_measure = makeCostMeasure(id="cost_measure", name="5FN=1FP", costs=costs, 
+                               best=0, worst=5)
+
 # Define performance metrics we want to plot, ppv=precision, tpr=recall
-perf_to_plot <- list(fpr, tpr, ppv, mmce)
+perf_to_plot <- list(fpr, tpr, ppv, cost_measure)
 
 # Generate the data for the plots, do aggregate=T if you want the mean
 thr_perf <- generateThreshVsPerfData(res$pred, perf_to_plot, aggregate=F)
@@ -285,4 +298,5 @@ plot_par_dep_plot_slopes(par_dep_data, decimal=5)
 # ------------------------------------------------------------------------------
 
 # Plot a performance metric for two hyper parameters, generates .pdf
-plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder="svm_hypers")
+plot_hyperpar_pairs(res, ps, "pr10.test.mean", output_folder=output_folder, 
+                    indiv_pars=F)
